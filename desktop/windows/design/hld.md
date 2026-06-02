@@ -1,0 +1,2216 @@
+- 代码级 LLD。
+- API 字段级定义。
+- 数据库 migration 逐条改写方案。
+- Electron、Go、Python、前端的具体代码 patch。
+- 工作量、排期、人员分配。
+- 算法与 RAG 本身的安全专题，例如 prompt injection、模型工具调用治理、RAG 数据投毒、模型输出安全等。这些问题后续单独设计；本文只关注 Cloud/Server 运行环境迁移到 Electron Desktop 运行环境时新增的安全边界。
+
+### 0.2 命名约定
+
+- **LazyMind**：面向用户的桌面产品名称。
+- **LazyRAG**：现有代码仓库、后端服务、算法与 RAG 能力的基础工程形态。
+- **Desktop Mode**：桌面运行模式。
+- **Cloud/Server Mode**：现有云端/服务端部署模式。
+- **AI 助手**：Desktop Mode 前台产品概念，后台本质仍复用现有用户模型。
+- **当前助手**：当前前端选中的 AI 助手，也就是当前请求上下文中的用户。
+
+命名原则：用户能在前端、安装包、窗口标题、菜单、提示文案、默认目录说明、诊断导出说明中看到的产品名称统一使用 **LazyMind**。用户看不见的内部实现部分尽量少改动；包名、环境变量前缀、内部目录、已有配置键、代码模块名在必要时可以继续沿用 **LazyRAG**，避免为了重命名引入额外迁移风险。
+
+---
+
+# 1. 整理原始需求
+
+本章只整理需求，不展开方案。需求来自 Issue #1 原始描述及后续讨论对齐后的决议。
+
+## 1.1 产品目标
+
+新增一个 Windows Desktop Mode，使 LazyMind 能作为桌面应用运行。
+
+桌面应用应具备以下产品特征：
+
+- 用户安装后打开即可使用。
+- 不要求用户安装 Docker、Node、Go、Python 等开发环境。
+- 不暴露云端多租户部署复杂度。
+- 不要求用户理解后端服务、端口、数据库、网关等基础设施概念。
+- 桌面端仍保留多“用户”的底层能力，但产品上呈现为多个 AI 助手。
+- Windows 是首个目标平台，也是本方案的交付重点；macOS 只做低成本预留，不进入 Windows Phase 1 的核心验收范围。
+
+## 1.2 桌面运行形态需求
+
+Desktop Mode 的桌面运行形态应满足：
+
+- 使用 Electron 包装前端。
+- 前端在 Electron Renderer 中运行。
+- Go 后端和 Python 后端预编译或预打包后随桌面应用一起分发。
+- Electron 在本地启动、监控、关闭 Go/Python 后端。
+- 不使用 Docker Compose 作为桌面端运行依赖。
+- 不要求终端启动，也不要求用户手工启动多个服务。
+- 本地服务端口、日志、数据目录由桌面应用统一管理。
+
+## 1.3 身份、用户与 AI 助手需求
+
+Desktop Mode 仍保留后台“用户”概念，但前台产品语义改成“AI 助手”。
+
+已对齐需求如下：
+
+- 免登录，打开应用后直接进入主界面。
+- 首次启动自动创建默认用户组、默认权限和默认 AI 助手。
+- 默认首个 AI 助手名称为“天文学家”，头像使用 emoji 土星 `🪐`。
+- 默认首个 AI 助手描述为：`天文学家是一位专注于太阳系、行星、卫星、小行星、彗星和基础天文知识的入门向导，擅长用清晰、耐心、富有画面感的方式解释宇宙中的常见现象，帮助用户从太阳系开始建立对天文学的整体认识。`
+- 默认数据目录中内置一份约 100KB 的 Markdown 示例文档，内容为太阳系基础知识，用于首次启动后的知识库和问答演示。
+- 前台不展示“管理员 / 普通用户”概念。
+- 后台每个 AI 助手本质上是一个普通用户。
+- 所有 AI 助手平级，不引入主用户 / 子用户层级。
+- 可以新建 AI 助手。
+- 新建 AI 助手所需字段与现有“新建用户”保持一致，不在 Phase 1 阶段新增一套独立字段模型。
+- 新建 AI 助手时，后台创建一个用户。
+- 新建的用户自动加入默认用户组。
+- 新建的用户默认具备写权限。
+- 当前选中的 AI 助手就是当前请求上下文中的用户。
+- 技能页面可以切换 AI 助手，并查看该助手的技能。
+- 问答页面可以切换 AI 助手，并以该助手身份问答。
+- 会话、技能、记忆、偏好等数据需要按助手隔离。
+
+## 1.4 权限与 RBAC 需求
+
+原始需求中提到 Desktop Mode 去掉 RBAC。讨论后对齐为：
+
+- Desktop Mode 去掉 RBAC 的产品复杂度。
+- 不物理删除 RBAC 数据模型和底层权限检查链路。
+- 默认角色、默认组、默认写权限由系统自动准备。
+- 普通用户不需要在 Desktop UI 中理解或配置 RBAC。
+- 保留底层模型以降低对 Cloud/Server Mode 的破坏风险。
+
+## 1.5 网关需求
+
+Desktop Mode 不使用 Kong Gateway。
+
+需求侧表达为：
+
+- 桌面应用内部不要求独立部署 API Gateway。
+- 前端访问本地 API 时应使用桌面应用提供的统一入口。
+- Cloud/Server Mode 继续保留现有 Kong 路线，不因 Desktop Mode 改造被删除。
+
+## 1.6 本地存储与中间件需求
+
+原始需求和后续决议对本地存储的要求如下：
+
+- PostgreSQL 替换为 SQLite。
+- OpenSearch 替换为本地轻量实现，原则上复用现有 SegmentStore 体系扩展，不重新发明新的抽象层。
+- Milvus 替换为 Milvus Lite。
+- Milvus Lite 在 Phase 1 功能实现和 Phase 2 安装包两个阶段都暂定为默认方案。
+- 暂不并行考虑 LanceDB、Qdrant 等其他方案。
+- 如果 Phase 1 对 Milvus Lite 的验证结果不理想，再基于测试结果更新方案。
+- Redis 不作为 Desktop Mode 必需中间件；但 Redis 当前承担的运行时语义不能被简单忽略。
+- SQLite、Milvus Lite、本地文件、日志目录等数据都应由桌面应用统一管理。
+
+## 1.7 文档扫描与文件权限需求
+
+桌面应用需要支持用户把本机文件纳入知识库或扫描范围。
+
+已对齐需求如下：
+
+- 不采用默认全盘无脑扫描。
+- 允许用户在前端界面指定要扫描的路径。
+- Phase 1 先复用现有扫盘逻辑和功能。
+- 后续扫盘功能重写后再适配新的实现。
+- 初始提供一个默认目录，例如用户目录下的 `LazyMind` 目录，并放入约 100KB 的太阳系知识 Markdown 示例文档。
+- 用户访问额外目录时，按平台机制处理权限请求。
+- Windows 上如访问系统目录或受保护目录，可能触发 UAC 或权限失败提示。
+- macOS 后续需要处理更多文件访问权限弹窗和授权边界。
+
+## 1.8 解析、OCR、Office 与在线 API 需求
+
+Desktop Mode 不要求 Phase 1 阶段内置完整重型解析能力。
+
+已对齐需求如下：
+
+- Office 转换、OCR、MinerU、PaddleOCR 不作为 Phase 1 必需本地能力。
+- Desktop Mode 可以使用线上 API 完成部分解析或模型能力。
+- 使用线上 API 可以减少本地安装包体积和本地依赖复杂度。
+- 缺少本地重型组件时，需要有明确降级或提示。
+- Phase 1 阶段模型、Office/OCR 等能力默认可走 mock server、mock 配置、线上 API 或明确降级提示。
+- 用户后续通过模型配置界面自行配置真实模型或线上 API key。
+
+## 1.9 Evo 需求
+
+已对齐需求：
+
+- Desktop Phase 1 阶段可以剪掉 Evo。
+- Evo 不作为桌面主链路验证的阻塞项。
+- 后续如需要，可作为可选模块重新接入。
+
+## 1.10 日志与可观测性需求
+
+已对齐需求如下：
+
+- 当前以现有 log 体系为主。
+- OpenTelemetry 可以后续接入，不作为 Desktop Phase 1 的必需能力。
+- Electron 需要负责日志采集、进程日志归档和诊断导出。
+- 日志不能泄露 API key、token、用户文档正文等敏感信息。
+
+## 1.11 P1 事件循环与外部渠道需求
+
+原始需求中包含 P1 能力：
+
+- 给每个用户 / AI 助手加一个事件循环，用于监听任务。
+- 接入微信、飞书等外部渠道。
+
+该需求属于 Desktop Mode 后续增强能力，不应阻塞 Phase 1 主链路，但需要在架构中避免与当前助手模型冲突。
+
+## 1.12 Cloud/Server Mode 共存需求
+
+Desktop Mode 不是 Cloud/Server Mode 的替代分支。
+
+共存需求如下：
+
+- 同一个代码仓库需要同时支持 Cloud/Server Mode 和 Desktop Mode。
+- Desktop Mode 不应破坏现有 Docker、Kong、PostgreSQL、Redis、Milvus、OpenSearch 路线。
+- Desktop 专属依赖不能污染 Cloud 构建链路。
+- Cloud 默认行为不应因为 Desktop 代码引入而改变。
+- 所有 Desktop 差异应由显式模式开关启用。
+
+## 1.13 运行环境迁移安全需求
+
+本次改造的安全关注点放在“云端 Web/服务端运行环境迁移到 Electron 桌面运行环境”所新增的安全边界上。
+
+需要覆盖的安全需求包括：
+
+- Electron Renderer 不能因为桌面化获得不必要的 Node.js、文件系统或系统命令能力。
+- Renderer 与 Electron Main Process 之间的 Preload / IPC 必须是最小能力白名单。
+- Local Proxy 和本地后端 API 必须被视为新的本地信任边界，不能因为监听 localhost 就默认可信。
+- 本地后端服务端口默认只能绑定 localhost，不对局域网暴露。
+- 当前助手身份不能由普通前端代码随意伪造。
+- 本地文件扫描、目录选择、日志打开、诊断包导出等桌面能力必须限制范围并校验参数。
+- 用户密钥、在线 API key、本地服务 secret、配置文件和诊断包必须避免明文泄露。
+- 子进程启动、后端二进制路径、命令行参数和环境变量必须避免命令注入和路径劫持。
+- 安装包、升级包、后端二进制、Python 打包产物需要考虑签名、完整性和供应链风险。
+- 日志和诊断包不能包含用户文档正文、明文 token、API key 或其他敏感配置。
+
+不在本次 HLD 中展开的安全需求包括：
+
+- prompt injection。
+- RAG 数据投毒。
+- 模型输出内容安全。
+- 模型工具调用策略。
+- 多租户云端隔离增强。
+- 企业级合规审计。
+
+这些属于算法、RAG 或企业安全专题，后续单独设计。
+
+---
+
+# 2. 需求分析和细化
+
+本章聚焦需求本身，尽量不引入具体技术方案。技术设计从第 3 章开始。
+
+## 2.1 核心用户场景
+
+### 2.1.1 首次安装与启动
+
+用户安装桌面应用后，首次打开应看到可用的主界面，而不是部署说明、登录页或服务启动失败页面。
+
+首次启动需要完成：
+
+- 初始化本地应用数据目录。
+- 准备默认配置。
+- 准备默认 AI 助手。
+- 准备默认权限边界。
+- 准备必要的本地服务。
+- 进入可操作 UI。
+
+用户不应感知这些初始化细节。
+
+### 2.1.2 多 AI 助手使用
+
+用户可以创建多个 AI 助手，用于不同知识库、技能、会话、偏好或工作场景。
+
+用户关心的是：
+
+- 当前我正在和哪个 AI 助手交互。
+- 这个助手有哪些技能和知识。
+- 切换助手后，会话和技能是否会隔离。
+- 新建助手是否简单直接。
+
+用户不关心：
+
+- 后台是否创建了一个 user row。
+- user 是否属于某个 group。
+- 角色权限如何表达。
+- 当前请求里注入了什么 header。
+
+### 2.1.3 本地文档纳入知识库
+
+用户希望把本地文件加入知识库或扫描范围。
+
+需求关键点：
+
+- 用户应主动选择路径。
+- 系统不应默认扫描整个磁盘。
+- 对无权限目录要给出可理解提示。
+- 对已选择路径要能持续扫描或重新扫描。
+- 对扫描、解析、索引状态要有可见反馈。
+
+### 2.1.4 问答与技能使用
+
+用户希望在桌面应用里完成：
+
+- 选择 AI 助手。
+- 选择或使用该助手的知识库、技能、词汇、偏好。
+- 发起问答。
+- 看到与当前助手关联的会话。
+- 切换助手后看到另一个助手自己的上下文。
+
+### 2.1.5 本地故障诊断
+
+桌面应用运行在用户本机，故障类型会比云端更多。
+
+用户或开发者需要能够定位：
+
+- 哪个本地服务没有启动。
+- 哪个端口或进程异常。
+- 哪个数据目录不可写。
+- 哪个文件解析失败。
+- 哪个模型或在线 API 配置不可用。
+- 哪些日志可用于反馈问题。
+
+## 2.2 功能需求细化
+
+### 2.2.1 桌面壳能力
+
+桌面壳需要提供：
+
+- 主窗口。
+- 前端资源通过 Electron 自定义协议加载。
+- 本地后端进程启动。
+- 本地后端进程停止。
+- 本地 API 统一入口。
+- 本地配置读写。
+- 本地日志归档。
+- 本地诊断导出。
+- 文件夹选择等桌面能力。
+
+### 2.2.2 AI 助手管理
+
+AI 助手管理需要提供：
+
+- 默认助手初始化。
+- 默认首个助手为“天文学家 🪐”。
+- 助手列表展示。
+- 新建助手。
+- 新建助手字段与现有新建用户字段保持一致。
+- 切换当前助手。
+- Assistant Switcher 作为全局顶部组件出现，而不是只在 Chat、技能、知识库页面局部出现。
+- 助手名称、头像、描述等基础信息维护。
+- 与技能、问答、知识库等页面联动。
+
+### 2.2.3 身份上下文传播
+
+Desktop Mode 必须有稳定机制表达“当前助手是谁”。
+
+需求上需要保证：
+
+- 前端看到的当前助手与后端收到的当前用户一致。
+- 技能、问答、记忆、会话、知识库访问不会串助手。
+- 首次启动、重启应用、切换助手后，当前助手状态可预测。
+- 新建助手后能立即作为当前助手使用或被选择。
+
+### 2.2.4 本地数据管理
+
+本地数据管理需要覆盖：
+
+- 关系数据。
+- 向量数据。
+- 全文/片段索引数据。
+- 上传文件。
+- 扫描文件元数据。
+- 缓存。
+- 日志。
+- 诊断包。
+- 备份与恢复所需的基本边界。
+
+### 2.2.5 文档扫描与索引
+
+文档扫描与索引需求包括：
+
+- 用户选择扫描路径。
+- 记录扫描路径。
+- 扫描文件变化。
+- 提交解析任务。
+- 构建或更新索引。
+- 展示扫描、解析、索引状态。
+- 支持后续重扫、重建或清理。
+
+Phase 1 阶段允许复用现有扫盘逻辑，不要求一次性重写。
+
+### 2.2.6 在线 API 与本地能力边界
+
+Desktop Mode 可以使用线上 API。
+
+需求上需要明确：
+
+- 哪些能力必须本地可运行。
+- 哪些能力允许走线上 API。
+- 哪些能力缺失时允许降级。
+- 用户如何配置在线 API key 或模型服务。
+- 离线场景下哪些功能不可用。
+- Phase 1 默认可使用 mock server / mock 配置，Chat 时需要明确提示用户当前模型配置处于 mock 状态，并引导用户到模型配置界面配置真实模型。
+
+### 2.2.7 事件循环与外部渠道
+
+每个 AI 助手未来需要独立事件循环，以支持：
+
+- 周期性任务。
+- 外部消息监听。
+- 微信、飞书等渠道接入。
+- 以某个助手身份处理任务。
+
+该需求依赖当前助手 / 用户模型稳定，因此不应在 Phase 1 中改变已对齐的身份模型。
+
+## 2.3 非功能需求细化
+
+### 2.3.1 易安装
+
+用户不应安装开发环境，也不应理解 Docker 或后端服务拓扑。
+
+### 2.3.2 易启动
+
+打开桌面应用后，本地服务应自动启动。启动失败时，用户应看到明确提示，而不是空白页或浏览器级错误。
+
+### 2.3.3 易诊断
+
+桌面端必须从早期就具备日志和诊断能力，否则 Windows 用户环境差异会导致问题难以复现。
+
+### 2.3.4 数据隔离
+
+不同 AI 助手之间需要数据隔离。至少会话、技能、记忆、偏好、知识库访问上下文不能混淆。
+
+### 2.3.5 Cloud 共存
+
+Desktop Mode 的新增代码不能破坏现有云端部署。任何模式差异都必须有明确边界。
+
+### 2.3.6 本地安全
+
+本阶段的本地安全重点是运行环境迁移安全，即从云端 Web/服务端形态变成 Electron 桌面形态后新增的攻击面。算法和 RAG 本身的安全问题不在本次计划中展开。
+
+桌面应用至少需要满足：
+
+- Renderer 不直接获得 Node.js、文件系统、shell、任意 IPC 等高权限能力。
+- Preload 只暴露白名单 API，不把 `ipcRenderer`、Electron 原生 API 或通用 command executor 暴露给前端。
+- IPC handler 必须校验调用来源、参数 schema、路径范围和操作权限。
+- Local Proxy 与本地后端之间需要有本地信任边界，不能只依赖“请求来自 localhost”。
+- 本地服务端口默认只监听 `127.0.0.1`，不监听 `0.0.0.0`。
+- 不把密钥写入普通日志。
+- 不把用户文档正文写入诊断包。
+- 不默认扫描全盘。
+- 对受保护目录访问失败给出提示。
+- 对本地端口暴露范围做控制。
+- 子进程启动不得拼接 shell 命令，不得让用户输入直接变成命令行。
+- 安装包、升级包和本地后端二进制需要考虑签名、完整性和依赖供应链风险。
+
+### 2.3.7 跨平台预留
+
+Windows 是首个交付平台，也是本方案重点。macOS 不进入 Windows Phase 1 的核心验收范围。路径、日志、子进程、资源定位、签名、权限请求等仍应避免散落写死在业务代码中，但 macOS 只做低成本架构预留，不要求在本方案中完成 macOS 级别的详细设计或验证。
+
+## 2.4 需求优先级理解
+
+### 2.4.1 Phase 1 功能实现必须满足
+
+新版 Phase 1 不再只是早期可行性验证，而是把原前两个阶段合并为“功能实现”阶段。Phase 1 必须满足：
+
+- Electron 桌面壳可运行。
+- 本地后端可由 Electron 启动和关闭。
+- 本地可 build 出自包含运行目录 `~/LazyMind_dev/`。
+- 自包含目录中包含 `LazyMind.exe` 主程序，双击即可启动应用，且不弹出终端窗口。
+- build 前自动清理旧进程和旧输出目录，避免 Windows 文件占用导致构建失败。
+- 构建命令使用 Windows 原生命令或 PowerShell，不依赖 `sed`、`sleep`、`grep` 等 Unix-only 工具。
+- 免登录进入主界面。
+- 默认 AI 助手初始化。
+- 新建 AI 助手。
+- 切换 AI 助手。
+- 当前助手身份能传到后端。
+- 技能、问答、知识库、扫描和模型配置主入口能围绕当前助手工作。
+- 真实关系数据落 SQLite。
+- 真实向量能力使用 Milvus Lite。
+- OpenSearch 替代能力通过现有 SegmentStore 体系接入本地实现。
+- Chat、知识库、解析、索引、问答形成可验证闭环。
+- 文件扫描与知识库构建形成真实流程。
+- 模型配置复用既有 `/model-providers` 页面，支持 inner 预置配置和 dynamic GUI 配置。
+- 线上 API 与本地能力边界清晰，缺失 Office/OCR/MinerU/PaddleOCR 等重型能力时有明确降级提示。
+- 去除 Desktop UI 中的登录、复杂 RBAC、用户角色管理和 Evo 入口；底层数据模型可保留，通过模式开关隐藏或禁用界面完成。
+- 日志、诊断、安全基线、功能、性能、稳定性验证通过。
+
+### 2.4.2 Phase 1 可以降级或后置
+
+Phase 1 可以降级或后置：
+
+- 完整 Office 本地转换。
+- 本地 OCR。
+- MinerU。
+- PaddleOCR。
+- Evo。
+- 微信 / 飞书接入。
+- OpenTelemetry。
+- 产品化安装包、正式签名、升级器和卸载器。
+
+### 2.4.3 Phase 2 安装包阶段必须满足
+
+新版 Phase 2 是“打安装包”阶段。安装包阶段应满足：
+
+- 无开发环境运行。
+- 无 Docker 运行。
+- 后端二进制或可执行目录随包分发。
+- 干净 Windows 环境可安装、启动、升级、卸载。
+- 用户数据目录与应用安装目录分离。
+- 诊断包可导出。
+- GitHub CI 能生成可追溯的 Windows installer artifact，并附带校验和、commit SHA 和构建日志。
+
+## 2.5 关键依赖识别
+
+### 2.5.1 身份模型依赖
+
+AI 助手切换依赖后台用户模型、前端 auth facade、本地代理、后端请求上下文一致。如果这一层不稳定，技能、问答、知识库、事件循环都会受影响。
+
+### 2.5.2 SQLite 迁移依赖
+
+PostgreSQL 到 SQLite 不只是连接串变化，还依赖 migration、seed SQL、ORM、SQL 方言和多进程写入策略。
+
+### 2.5.3 Milvus Lite 验证依赖
+
+Milvus Lite 是 Desktop 功能实现和安装包阶段的暂定默认方案，因此 Phase 1 必须尽早验证并完成真实链路接入：
+
+- Windows 环境能安装。
+- 能随 Python 打包或桌面应用分发。
+- 能在用户数据目录下创建、读写、重建数据。
+- 与现有向量检索调用链能接上。
+- 性能、稳定性、数据损坏恢复没有明显阻塞问题。
+
+如果 Phase 1 验证不理想，才进入方案更新，不在本文预设其他并行主线。
+
+### 2.5.4 SegmentStore 依赖
+
+OpenSearch 替换应复用现有 SegmentStore 体系。需要识别现有代码中绕过 SegmentStore、直接调用 OpenSearch API 的位置，并在后续阶段收敛。
+
+### 2.5.5 Python 打包依赖
+
+Python 算法模块、LazyLLM、Milvus Lite、解析工具、在线 API SDK 等需要从 Phase 1 起持续验证打包可行性，不能等到安装包阶段才发现依赖无法分发。
+
+### 2.5.6 扫盘逻辑依赖
+
+Phase 1 复用现有扫盘逻辑，因此 Desktop 主链路不能依赖未来扫盘重写。后续扫盘重写完成后，再做适配。
+
+### 2.5.7 外部渠道依赖
+
+微信、飞书等外部渠道依赖事件循环、身份上下文、凭据管理和后台任务机制，应在主链路稳定后接入。
+
+---
+
+# 3. 总体架构和技术设计
+
+本章是 HLD 级技术方案，不展开到函数、表结构、接口字段级别。
+
+## 3.1 总体架构目标
+
+Desktop Mode 的总体架构目标是：
+
+- 用 Electron 承担桌面壳、本地进程管理、本地代理、本地配置、本地日志和诊断能力。
+- 复用现有前端源码，使用 Desktop Mode 构建或运行开关隐藏登录和高级权限 UI。
+- 复用现有 Go/Python 后端业务能力，新增 Desktop Mode 配置和适配层。
+- 用 SQLite、Milvus Lite、本地文件系统替代桌面端不适合直接部署的云端中间件。
+- Cloud/Server Mode 与 Desktop Mode 在同一仓库中共存，通过显式模式开关隔离。
+
+## 3.2 HLD 架构图
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│ LazyMind Desktop App                                                │
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ Electron Main Process                                          │  │
+│  │                                                               │  │
+│  │  ├─ Window Manager                                             │  │
+│  │  ├─ Local Proxy                                                │  │
+│  │  ├─ Process Manager                                            │  │
+│  │  ├─ Desktop Config Manager                                     │  │
+│  │  ├─ Data Directory Manager                                     │  │
+│  │  ├─ Log Collector / Diagnostics Exporter                       │  │
+│  │  └─ Native Capability Adapter                                  │  │
+│  │       ├─ choose folder                                         │  │
+│  │       ├─ open log folder                                       │  │
+│  │       └─ platform permission handling                          │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ Electron Renderer                                              │  │
+│  │                                                               │  │
+│  │  ├─ Existing Frontend App                                      │  │
+│  │  ├─ Desktop Auth Facade                                        │  │
+│  │  ├─ Assistant Switcher                                         │  │
+│  │  ├─ AI Assistant Management                                    │  │
+│  │  ├─ Chat / Q&A                                                 │  │
+│  │  ├─ Skills                                                     │  │
+│  │  ├─ Knowledge Base / Document Scan UI                          │  │
+│  │  └─ Diagnostics UI                                             │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  Local Proxy                                                        │
+│    ├─ /api/auth/*  ───────────────> auth-service                    │
+│    ├─ /api/core/*  ───────────────> core                            │
+│    ├─ /api/chat/*  ───────────────> algorithm/chat                  │
+│    ├─ /api/parse/* ───────────────> algorithm/parsing               │
+│    ├─ /api/scan/*  ───────────────> scan-control-plane              │
+│    └─ /api/file/*  ───────────────> file-watcher / file service     │
+│                                                                     │
+│  Local Processes                                                    │
+│    ├─ Go core                                                       │
+│    ├─ Go scan-control-plane                                        │
+│    ├─ Go file-watcher                                               │
+│    ├─ Python auth-service                                           │
+│    ├─ Python algorithm/chat                                         │
+│    ├─ Python algorithm/parsing / processor / doc-service            │
+│    └─ Optional later modules                                        │
+│                                                                     │
+│  Local Data Directory                                               │
+│    ├─ SQLite DB files                                               │
+│    ├─ Milvus Lite data                                              │
+│    ├─ SegmentStore local index                                      │
+│    ├─ uploads / scanned file metadata                               │
+│    ├─ cache                                                         │
+│    ├─ logs                                                          │
+│    └─ diagnostics / backups                                         │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## 3.3 模式边界设计
+
+新增或复用统一模式开关。用户可见文案统一使用 LazyMind；用户不可见的内部环境变量和配置键尽量少改动，必要时可以沿用既有 LazyRAG 前缀，例如：
+
+```text
+APP_MODE=desktop
+LAZYRAG_MODE=desktop
+VITE_LAZYRAG_MODE=desktop
+```
+
+具体命名可在 LLD 中确定，但 HLD 原则如下：
+
+- 未显式启用 Desktop Mode 时，默认仍为 Cloud/Server Mode。
+- Desktop Mode 差异必须集中在适配层、配置层、构建入口、feature flag、auth facade 和 store implementation 中。
+- 不允许用大面积 fork 方式复制前端或后端代码。
+- 不允许把 Desktop 依赖变成 Cloud Docker 镜像必需依赖。
+- CI 需要分别验证 Cloud artifact 和 Desktop app。
+
+## 3.4 Electron 职责边界
+
+Electron Main Process 负责桌面应用层能力：
+
+- 窗口生命周期。
+- 本地数据目录初始化。
+- 本地端口分配。
+- 子进程启动、健康检查、停止和异常处理。
+- 本地 API 代理。
+- 当前助手身份 header 注入。
+- stdout/stderr 日志采集。
+- 诊断包导出。
+- 文件夹选择等 native 能力。
+- 安装包生命周期相关行为。
+
+Electron 不负责：
+
+- 业务数据权限判断。
+- 具体 RAG 算法逻辑。
+- 具体文档解析逻辑。
+- 替代后端服务的业务实现。
+
+## 3.5 前端职责边界
+
+前端保持同一套源码，按模式显示不同产品体验。
+
+Desktop Mode 前端负责：
+
+- 隐藏登录、注册、复杂 RBAC 页面。
+- 隐藏或移除用户角色管理、管理员 / 普通用户等 Cloud 多租户管理入口。
+- 隐藏或移除 AI 自进化 Evo 入口和相关路由。
+- 展示 AI 助手管理，而不是传统用户管理。
+- 提供全局顶部 Assistant Switcher。
+- 在技能、问答、知识库等页面使用当前助手上下文。
+- 显示本地服务状态、索引状态、扫描状态、模型配置状态。
+- 直接复用既有 `/model-providers` 页面作为模型配置入口；不维护 Desktop 专属简化页面。
+- 当 mock 模型配置生效时，在 Chat 中明确提示用户当前处于 mock 状态，并引导到模型配置界面配置真实模型。
+- 调用 Electron 暴露的选择目录、打开日志、导出诊断等能力。
+
+前端不应负责：
+
+- 伪造后端权限模型。
+- 只靠 localStorage 绕过认证。
+- 自己维护一套与后端不一致的助手身份。
+
+## 3.6 Local Proxy 设计
+
+Local Proxy 是 Desktop Mode 中替代 Kong 的本地代理层。
+
+职责：
+
+- 接收 Renderer 的相对路径 API 请求。
+- 转发到本机对应后端服务端口。
+- 注入当前助手对应的用户上下文。
+- 处理 CORS、SSE、上传、下载。
+- 对本地服务不可用、启动中、异常退出提供统一错误表达。
+- 可选地对本地端口访问范围做限制。
+
+HLD 路由示例：
+
+```text
+/api/auth/*       -> auth-service
+/api/core/*       -> core
+/api/chat/*       -> algorithm chat service
+/api/parse/*      -> parsing service
+/api/processor/*  -> processor service
+/api/doc/*        -> doc-service
+/api/scan/*       -> scan-control-plane
+/api/file/*       -> file-watcher / file service
+```
+
+具体路径兼容现有前端和后端，不在 HLD 中强制重命名。
+
+Desktop Mode 下没有 Kong 负责身份 header 注入，必须由受控请求层补足：
+
+- Renderer 普通业务请求统一走 Local Proxy 或受控 API client。
+- Local Proxy 覆盖前端传入的 `X-User-ID` / `X-User-Id`，并注入当前助手对应的用户 ID。
+- 前端 API client 可在 Desktop Mode 自动带上当前助手 ID 作为请求上下文，但后端不得无条件信任 Renderer 直接传入的该 header。
+- Local Proxy 同时注入 `X-Desktop-Secret` / 等价本地 secret，用于后端识别受控本地请求。
+
+## 3.7 AI 助手与身份设计
+
+### 3.7.1 产品模型
+
+Desktop Mode 前台只有“AI 助手”概念。
+
+- 默认创建一个 AI 助手。
+- 默认首个 AI 助手名称为“天文学家”。
+- 默认首个 AI 助手头像为 `🪐`。
+- 默认首个 AI 助手描述为：`天文学家是一位专注于太阳系、行星、卫星、小行星、彗星和基础天文知识的入门向导，擅长用清晰、耐心、富有画面感的方式解释宇宙中的常见现象，帮助用户从太阳系开始建立对天文学的整体认识。`
+- 默认数据目录内置约 100KB 的太阳系知识 Markdown 示例文档，作为首次启动演示内容。
+- Phase 1 必须让样例文档进入真实扫描、解析、索引和问答闭环；如果模型仍使用 mock 配置，Chat 需要提示 mock 状态并引导用户到 `/model-providers` 配置真实模型。
+- 用户可以创建多个 AI 助手。
+- 新建 AI 助手字段与现有新建用户字段保持一致。
+- 用户可以通过全局顶部 Assistant Switcher 切换当前 AI 助手。
+- 每个助手有自己的技能、知识、会话、偏好。
+- AI 助手数量、删除 / 归档、默认组绑定清理和助手级数据清理需要在 LLD 中明确；Phase 1 至少验证 50 个助手的创建、切换和隔离行为。
+
+### 3.7.2 后台模型
+
+后台复用现有用户模型。
+
+- 每个 AI 助手对应一个后台用户。
+- 所有助手用户平级。
+- 新建助手就是创建用户。
+- 默认组和默认写权限自动绑定。
+- 不引入主用户 / 子用户。
+- 不引入 actor / effective user 双身份模型。
+- 删除或归档 AI 助手时，需要清理或停用后台用户、默认组绑定、会话、技能、知识库引用和事件循环状态；具体保留策略进入 LLD。
+
+### 3.7.3 请求上下文
+
+当前助手就是当前请求用户。
+
+- 前端当前助手 ID 与后端 `X-User-Id` 对齐。
+- 技能、问答、会话、记忆、偏好使用同一当前用户上下文。
+- Electron 的系统上下文仅用于本地初始化、健康检查、诊断等内部动作，不作为产品身份暴露。
+
+## 3.8 RBAC 设计
+
+Desktop Mode 不删除 RBAC。
+
+HLD 决策：
+
+- 保留角色、权限、用户组、用户表结构。
+- 保留后端权限检查链路。
+- 首次启动创建默认角色、默认组、默认写权限。
+- 新建 AI 助手自动加入默认组。
+- 前端隐藏复杂 RBAC 配置入口。
+- Desktop Mode 不提供开发者模式入口查看隐藏 RBAC 或服务状态；服务状态和诊断能力通过面向普通用户的状态提示、日志入口和诊断包导出能力提供。
+
+这样可以：
+
+- 降低 Cloud/Server Mode 回归风险。
+- 避免大面积删除权限逻辑。
+- 保证多个助手之间仍有一致的访问边界。
+
+## 3.9 本地数据目录设计
+
+Windows 默认用户数据目录建议：
+
+```text
+%APPDATA%\LazyMind\
+  config.yaml
+  data\
+    main.db
+    auth.db
+    algo.db
+    scan.db
+  vector\
+    milvus-lite\
+  segment\
+  uploads\
+  scanned\
+  cache\
+  logs\
+    electron-main.log
+    proxy.log
+    core.log
+    auth-service.log
+    algorithm-chat.log
+    algorithm-parsing.log
+    algorithm-processor.log
+    scan-control-plane.log
+    file-watcher.log
+    crash\
+    diagnostics\
+  backups\
+```
+
+macOS 后续低成本预留，不作为 Windows Phase 1 验收重点：
+
+```text
+~/Library/Application Support/LazyMind/
+  config.yaml
+  data/
+    main.db
+    auth.db
+    algo.db
+    scan.db
+  vector/
+    milvus-lite/
+  segment/
+  uploads/
+  scanned/
+  cache/
+  backups/
+
+~/Library/Logs/LazyMind/
+  electron-main.log
+  proxy.log
+  core.log
+  auth-service.log
+  algorithm-chat.log
+  algorithm-parsing.log
+  algorithm-processor.log
+  scan-control-plane.log
+  file-watcher.log
+  crash/
+  diagnostics/
+```
+
+用户可见的数据目录、安装包、菜单和界面文案使用 LazyMind。用户不可见的内部配置键、环境变量前缀或已有代码路径可以尽量沿用 LazyRAG，避免为了重命名引入额外风险。HLD 原则是：应用安装目录与用户数据目录分离。
+
+## 3.10 本地存储设计
+
+### 3.10.1 关系数据
+
+Desktop Mode 使用 SQLite 承载关系数据。
+
+范围包括：
+
+- 用户 / AI 助手。
+- 默认组和权限数据。
+- 会话与业务数据。
+- 扫描控制相关数据。
+- 算法管理表或文档任务表。
+
+关键设计要求：
+
+- 不能只改连接串。
+- migration / seed SQL 要兼容 SQLite。
+- 需要治理 PostgreSQL 特有语法。
+- Desktop Mode 默认不采用多个后端进程共同写同一个 SQLite 文件的模式。
+- 关系库按服务 ownership 拆分，跨服务读写通过 API 或事件，不通过跨库 SQL JOIN。
+- 推荐初始 ownership：
+  - `main.db`：core 独占写，承载会话、技能、记忆、偏好、模型配置、业务状态等 core 数据。
+  - `auth.db`：auth-service 独占写，承载用户 / AI 助手、组、角色、权限、token 或 Desktop Auth Provider 所需数据。
+  - `scan.db`：scan-control-plane / file-watcher 独占写，承载扫描源、文件状态、任务游标、文件变化状态。
+  - `algo.db`：algorithm / parsing / processor / doc-service 独占写，承载解析任务、算法文档任务、算法侧管理表。
+- 每个 SQLite 文件启用 `WAL`、`busy_timeout`、`foreign_keys` 等基础 pragmas，但 WAL 只作为缓解手段，不作为多写共享库的设计依据。
+- 如果后续证明某个服务必须写入另一个服务的数据，应优先改为该 owner 服务提供 API；只有在 API 调用成本不可接受时，才在 LLD 中明确单写服务或合并进程方案。
+
+### 3.10.2 向量数据
+
+两个阶段都暂定使用 Milvus Lite。
+
+HLD 原则：
+
+- Phase 1 阶段验证 Milvus Lite 在 Windows Desktop 下的可行性，并接入真实向量存储链路。
+- Phase 2 安装包阶段继续以 Milvus Lite 作为默认打包目标。
+- 暂不把 LanceDB、Qdrant 等作为并行方案纳入主线设计。
+- 如果 Phase 1 验证发现 Milvus Lite 在 Windows 安装、打包、稳定性、性能、数据目录、依赖冲突等方面不理想，再根据测试结果更新方案。
+
+Milvus Lite Go / No-Go 初始判定标准：
+
+- 在支持矩阵中的干净 Windows x64 环境中，安装、启动、创建 collection、写入、查询、删除、重启恢复 smoke 必须全部通过。
+- 打包后的 Python 服务必须能在无 Python 开发环境的 Windows 环境中完成同一组 smoke；如果 PyInstaller / Nuitka 产物无法稳定运行，必须触发方案更新。
+- 以 Phase 1 目标数据集规模进行验证时，常规 top-k 查询 P95 应低于 1s，P99 应低于 2s；超过该范围需要记录瓶颈并评估是否仍可接受。
+- Milvus Lite 数据目录必须能完整放在用户数据目录下，支持应用重启后继续读写；无法定位、迁移或清理用户数据目录时触发方案更新。
+- 单次 smoke 中出现可复现崩溃、数据损坏、进程无法退出、依赖冲突或杀毒软件持续拦截且无低成本规避方式时，触发方案更新。
+
+### 3.10.3 片段 / 全文检索数据
+
+OpenSearch 不进入 Desktop Mode。
+
+HLD 原则：
+
+- 复用现有 SegmentStore 体系。
+- 不重新设计一层新的 SegmentStore 抽象。
+- 新增 Desktop 本地 SegmentStore 实现。
+- 本地实现可基于 SQLite/FTS 或其他轻量方式，但具体实现细节放入 LLD。
+- 现有绕过 SegmentStore 直接访问 OpenSearch 的代码需要逐步收敛。
+
+### 3.10.4 Runtime Store
+
+Redis 不进入 Desktop Mode 的必需中间件。
+
+HLD 原则：
+
+- Redis 当前承担的状态、队列、TTL、阻塞等待等语义需要被识别。
+- 不应简单用 `sync.Map` 替换。
+- 应通过运行时存储接口隔离 Cloud Redis 与 Desktop 本地实现。
+- Phase 1 可以先实现内存 Runtime Store 以解除 Redis 依赖，但同阶段必须完成关键状态持久化设计和实现；Chat 状态、多回答关联、用户输入等需要重启后恢复的状态落 SQLite 或等价本地存储。
+
+当前需要重点覆盖的 Redis 语义包括：
+
+| 语义 | Cloud/Server Mode 现状 | Desktop Mode 方向 |
+|---|---|---|
+| Chat 状态 | 生成中 / 完成 / 失败状态使用 Redis hash 和 TTL 保存 | Runtime Store 提供状态接口；Phase 1 对需要重启恢复的状态落 `main.db` |
+| Chat 流式片段 | 流式 chunk 使用 Redis list 追加和 replay | 正常在线 SSE 直连仍由 core 转发 Python chat service；断线恢复、历史 replay 通过 Runtime Store 或 DB 明确实现 |
+| Chat 取消 | 取消信号使用 Redis list + blocking pop | Runtime Store 必须提供跨 goroutine / 进程的取消信号；不能只依赖前端断开连接 |
+| 多回答关联 | 主回答 / 副回答关联信息使用带 TTL 的 Redis key | Runtime Store 提供短生命周期关联记录 |
+| refresh token | auth-service 使用 Redis TTL key 保存 refresh token | Desktop 免登录场景可裁剪；如保留 token 语义，应落 `auth.db` 或 OS 安全存储 |
+| 登录限流 | auth-service 使用 Redis ZSET 做滑动窗口 | Desktop 免登录场景默认不需要；如保留登录入口，应落本地 Runtime Store 或 `auth.db` |
+
+Runtime Store LLD 必须回答：
+
+- Chat SSE 是由 core 统一转发 Python chat service，还是允许 Renderer 直连 chat service。
+- 断线恢复需要 replay 哪些 chunk，保留多长时间。
+- 取消信号需要跨哪些进程传播。
+- 哪些状态只需进程内存，哪些状态必须在应用重启后恢复。
+- Cloud Redis 实现和 Desktop 本地实现的行为对照测试范围。
+
+## 3.11 算法与解析设计
+
+Desktop Mode 算法设计分层：
+
+- Phase 1：完成 Python 算法模块启动、健康检查和真实解析、索引、检索、问答闭环。测试和默认开发配置可使用 mock LLM / embedding server，但文档、向量、片段、任务状态和用户隔离必须走真实本地存储链路。
+- Phase 1 Chat：当 mock 配置生效时，回答中或 Chat UI 中需要提示用户“当前模型配置处于 mock 状态，请到模型配置界面配置真实模型”。
+- Phase 1 首次启动示例 Markdown 用于验证默认目录、样例文档展示、扫描、解析、索引和知识库问答入口；真实 RAG 效果受模型配置影响，但本地数据链路必须可验证。
+- Phase 2：验证 Python 依赖、Milvus Lite、解析依赖可随安装包分发，并完成安装器级资源定位、升级和卸载验证。
+
+解析能力分级：
+
+- 基础文本 / Markdown / 可轻量处理文档：优先支持。
+- Office 转换：Phase 1 默认可走线上 API、mock server 或明确降级提示；用户沿用 `/model-providers` 配置真实能力。
+- OCR / MinerU / PaddleOCR：Phase 1 默认走 mock server、线上 API 或降级提示；后续按依赖可打包性逐项接入，并沿用模型配置界面让用户配置真实能力。
+
+Evo：
+
+- Phase 1 剪掉 Desktop UI 和主链路入口。
+- Phase 1 后端如保留底层模块，必须通过模式开关禁用，不作为主链路阻塞。
+- 后续如要接入，作为可选模块，由 Electron 管理进程和日志。
+
+## 3.12 扫盘与文件权限设计
+
+HLD 设计原则：
+
+- 用户通过前端显式添加扫描路径。
+- 默认不全盘扫描。
+- Phase 1 复用现有扫盘逻辑并接入真实扫描状态展示。
+- 后续扫盘功能重写后，再对 Desktop 适配。
+- Electron 提供选择目录能力。
+- Windows 上按需处理访问失败、UAC 或权限提示。
+- macOS 后续集中处理文件访问授权。
+
+## 3.13 日志与诊断设计
+
+Phase 1 起必须有日志。
+
+HLD 要求：
+
+- Electron 采集每个子进程 stdout/stderr。
+- 每个模块单独日志文件。
+- 支持日志滚动和大小上限。
+- 支持一键导出诊断包。
+- 诊断包包含配置摘要、服务状态、最近日志、崩溃信息。
+- 日志脱敏，不记录明文密钥、模型 key、token、用户文档正文。
+- OpenTelemetry 后续再接入，不阻塞 Phase 1。
+
+## 3.14 构建与发布边界
+
+Cloud/Server Mode 与 Desktop Mode 构建边界分离。
+
+HLD 原则：
+
+- Cloud 继续产出 Docker image 或现有 artifact。
+- Desktop 产出 Electron 安装包。
+- Desktop 构建入口独立。
+- Desktop 引入的 Electron、electron-builder、Python 打包工具、Milvus Lite 打包逻辑不能成为 Cloud 构建必需依赖。
+- CI 形成双模式矩阵。
+
+## 3.15 运行环境迁移安全设计
+
+本节只覆盖 Cloud/Server 运行环境迁移到 Electron Desktop 运行环境后的安全设计。算法和 RAG 安全专题不在本节展开。
+
+### 3.15.1 信任边界变化
+
+Cloud/Server Mode 的主要信任边界通常在浏览器、网关、服务端 API、云端网络和云端中间件之间。Desktop Mode 引入新的本地信任边界：
+
+```text
+Electron Renderer
+  -> Preload / IPC
+  -> Electron Main Process
+  -> Local Proxy
+  -> Local Backend Processes
+  -> Local Data Directory / User File System
+```
+
+因此，Desktop Mode 的安全目标不是简单复用云端 Web 安全策略，而是确保前端页面、IPC、本地代理、本地后端、本地文件系统、子进程和安装包之间的权限边界清晰。
+
+### 3.15.2 Electron Renderer 安全基线
+
+Desktop Renderer 应遵循最小权限原则：
+
+- 默认关闭 `nodeIntegration`。
+- 启用 `contextIsolation`。
+- 优先启用 renderer sandbox。
+- 不关闭 `webSecurity`。
+- 不允许加载不可信远程页面作为主应用 UI。
+- 不使用远程脚本作为主 UI 运行依赖。
+- 配置严格 CSP，默认只允许加载应用自身资源和明确允许的线上 API 域名。
+- 限制页面跳转、新窗口、`webview` 和外部链接打开。
+- 不使用 `file://` 直接承载主 UI。
+- Desktop Renderer 主 UI 确定使用 Electron 自定义协议方案加载，不考虑受控本地服务方案。
+
+#### Desktop Renderer 主 UI 加载方式决议
+
+Desktop Renderer 主 UI 使用 **自定义协议方案**：Electron 注册类似 `lazymind://` 或 `app://` 的自定义协议，由 Main Process 从安装包资源目录中读取并返回前端静态资源。
+
+采用该方案的理由：
+
+- 不占用本地 HTTP 端口，减少端口冲突和 localhost 暴露面。
+- 比 `file://` 更容易控制可访问资源范围。
+- 更贴近桌面应用分发模型。
+- 避免把主 UI 暴露成一个 localhost 网站。
+- 能把“主 UI 资源加载”和“本地 API 代理”分成两个边界：Renderer 静态资源由自定义协议加载，API 请求仍通过 Local Proxy 转发到本地后端。
+
+该方案需要在 LLD 中处理：
+
+- 自定义协议名称，例如 `lazymind://` 或 `app://`。
+- 静态资源路径解析。
+- 前端 history fallback。
+- CSP header 或等价策略。
+- 静态资源 MIME type。
+- 开发环境和生产环境差异。
+- 自定义协议下的 API base URL 策略。
+- 自定义协议 origin 与 Local Proxy CORS / 请求认证的关系。
+
+### 3.15.3 Preload / IPC 安全基线
+
+Preload 只作为安全网关暴露最小桌面能力。
+
+原则：
+
+- 不向 Renderer 暴露原始 `ipcRenderer`。
+- 不向 Renderer 暴露 Electron 原生 API。
+- 不提供通用 `executeCommand`、`readFile`、`writeFile`、`openPath` 等高风险泛化接口。
+- 每个 IPC API 只对应一个明确业务动作，例如选择目录、导出诊断包、打开日志目录。
+- Main Process 的 IPC handler 必须校验 sender 来源、参数类型、路径范围和操作权限。
+- 所有文件路径必须 canonicalize 后再校验，防止路径穿越、符号链接或 junction 绕过。
+
+### 3.15.4 Local Proxy 与本地 API 安全基线
+
+Local Proxy 是 Desktop Mode 的本地信任边界，不只是路由层。
+
+原则：
+
+- 本地服务默认只监听 `127.0.0.1`。
+- 禁止默认监听 `0.0.0.0` 或局域网地址。
+- Local Proxy 与后端服务之间使用启动时生成的本地 secret / 随机 token，避免任意本机进程直接伪造受信请求。
+- 后端不应无条件信任前端传入的 `X-User-Id`。
+- 当前助手身份应由受控层注入，普通 Renderer 代码不能随意伪造身份上下文。
+- CORS 只允许 Desktop Renderer 自定义协议 origin。
+- 上传、下载、扫描、删除、重建索引、导出诊断等接口需要保留权限与参数校验。
+- 本地 API 错误信息应能帮助诊断，但不泄露本地敏感路径、密钥或用户文档内容。
+
+### 3.15.5 文件系统与扫描安全基线
+
+桌面端新增访问用户文件系统的能力，需要最小化文件访问范围。
+
+原则：
+
+- 不默认全盘扫描。
+- 用户显式选择扫描路径。
+- 对用户选择路径进行 canonicalize 和权限检查。
+- 处理 Windows shortcut、symlink、junction、hardlink 等路径绕过风险。
+- 限制单文件大小、目录深度、扫描文件数量和临时文件空间。
+- 对无权限目录、系统目录、隐藏目录、网络盘等情况给出明确提示。
+- 文档解析失败不能导致主应用崩溃。
+- 诊断包不包含用户文档正文；如需包含文件名或路径，应考虑脱敏或最小化。
+
+### 3.15.6 密钥、配置与诊断包安全基线
+
+Desktop Mode 可能保存模型 API key、线上解析 API key、外部渠道 token、本地服务 secret 等。
+
+原则：
+
+- 密钥不写入普通日志。
+- 密钥不进入诊断包。
+- 密钥不硬编码在前端 bundle 或安装包模板中。
+- 本地配置文件如需保存 secret，应优先使用 OS 级安全存储，例如 Windows Credential Manager / DPAPI；macOS 后续使用 Keychain。
+- 诊断包默认只包含配置摘要、服务状态、版本号、最近日志和崩溃信息。
+- 诊断包导出前需要统一脱敏规则。
+- 诊断包必须对模型 key 脱敏。
+- Phase 1 阶段如暂时允许密钥明文写在开发配置文件中，也不得进入日志和诊断包。
+- Windows Credential Manager / DPAPI 优先在 Phase 1 完成；若实现风险过高，至少在 Phase 2 安装包验收中保留明确项。
+
+### 3.15.7 子进程与本地二进制安全基线
+
+Electron 负责启动本地 Go/Python 后端，必须避免命令注入和路径劫持。
+
+原则：
+
+- 启动子进程时不使用 `shell: true`。
+- 可执行文件路径从安装包资源目录或受控开发目录解析。
+- 命令行参数使用数组传递，不拼接 shell 字符串。
+- 用户输入不得直接进入命令行参数、环境变量或可执行路径。
+- 环境变量采用白名单方式传递。
+- 后端进程默认不以管理员权限运行。
+- 安装目录和后端二进制需要防止被普通低权限进程替换。
+- 子进程异常退出、残留、重复启动和端口占用要有明确处理策略。
+
+### 3.15.8 安装包、升级与供应链安全基线
+
+Desktop 安装包把可执行代码交付到用户机器，发布链路需要单独治理。
+
+原则：
+
+- Phase 1 自包含运行目录不要求安装包签名。
+- Windows installer 签名放到 Phase 2 安装包阶段考虑。
+- 后端 exe、Python 打包产物和更新包需要在 Phase 2 考虑完整性校验。
+- 自动更新必须使用 HTTPS 和签名校验。
+- 防止降级安装到已知不安全版本。
+- Electron、Chromium、Node、npm、Python、Go、Milvus Lite 等依赖需要版本锁定和漏洞扫描。
+- CI/CD 中的签名证书、发布 token 和更新密钥必须独立保护。
+- Cloud artifact 与 Desktop installer 的供应链扫描分开执行，互不污染依赖集合。
+
+### 3.15.9 本次不纳入的安全专题
+
+以下内容不进入本次 HLD 的实施计划，只作为后续专题：
+
+- prompt injection。
+- RAG 数据投毒。
+- 模型输出安全。
+- 模型工具调用权限治理。
+- 外部渠道消息安全策略。
+- 企业合规、审计、远程擦除。
+
+Phase 1 优先确保桌面运行环境迁移不会把 Web 前端问题、本地 API 问题、IPC 问题或打包发布问题放大成本机权限问题。
+
+## 3.16 启动体验与资源预算
+
+Desktop Mode 需要从 HLD 阶段设定资源边界，避免 Electron + 多后端进程 + Milvus Lite + Python 打包产物叠加后形成不可接受的桌面体验。
+
+初始目标：
+
+- 首屏可见：用户双击后 5 秒内展示主窗口、启动状态和可理解的 loading / splash，不出现空白页。
+- 核心可操作：Electron、Local Proxy、core、auth-service 初始化完成后，10 秒内进入可操作主界面；耗时功能显示局部 loading。
+- 完整能力就绪：Python chat / parsing / processor / scan 等非首屏必需服务可异步启动，30 秒内完成健康检查；未就绪功能需要显示明确状态。
+- 冷启动期间不阻塞窗口事件循环，Renderer 应能响应关闭、最小化和诊断入口。
+- Phase 1 必须记录各进程启动耗时、内存峰值和健康检查耗时，作为服务合并和打包优化依据。
+
+启动分层：
+
+- 第一层：Electron Main、Renderer 静态资源、Local Proxy、数据目录、日志目录。
+- 第二层：core、auth-service、默认助手初始化、Desktop Auth Provider。
+- 第三层：chat service、Milvus Lite smoke、SegmentStore 本地实现、scan-control-plane、file-watcher。
+- 第四层：parsing、processor、doc-service、Office/OCR 线上 API 或本地可选能力。
+
+最低运行环境初始口径：
+
+- Windows 10 1903+ x64，Windows 11 x64 作为主要验证环境。
+- 8GB RAM 起步；低于 8GB 不作为 Phase 1 主要验收环境。
+- 安装包和运行时基础数据至少预留 2GB 可用磁盘空间；用户文档、模型缓存和索引数据另计。
+- 中文路径、空格路径、普通用户权限运行必须纳入安装包阶段验证。
+
+## 3.17 桌面窗口与启动器设计
+
+### 3.17.1 菜单栏
+
+Desktop Mode 完全移除 Electron 默认应用菜单栏：
+
+- 使用 `Menu.setApplicationMenu(null)` 完全移除，不保留任何菜单项。
+- 不使用 `autoHideMenuBar`（按 Alt 键会闪现菜单，体验不一致）。
+- 不使用 `frame: false`（会失去系统标题栏和窗口控制按钮，需要自定义实现成本过高）。
+- 标准剪贴板快捷键（Ctrl+C/V/X/A、Ctrl+Z/Y）由 Chromium Renderer 原生支持，不依赖 Electron 菜单。
+
+### 3.17.2 免登录
+
+Desktop Mode 免登录是 Phase 1 功能实现目标：
+
+- 前端 `isDesktopMode()` 检测 Electron 环境，跳过登录页面重定向。
+- Desktop Store 初始化时通过 Preload API 获取当前助手信息，写入合成 auth 状态到 localStorage。
+- Electron Main Process 启动时通过 Assistant Manager 调用 auth-service `/desktop/bootstrap` 进行幂等初始化。
+- Local Proxy 对所有前端请求注入当前助手的 `X-User-Id` 和 `X-Desktop-Secret` header，后端无需额外 JWT 认证。
+- auth-service Desktop 端点不要求 Bearer token，仅在 `LAZYMIND_MODE=desktop` 时注册。
+- 设置页面不得显示“前往登录”入口。
+- 系统管理入口在 Desktop Mode 下直接管理 AI 助手，不暴露 Cloud 用户角色管理语义。
+
+### 3.17.3 启动器
+
+Phase 1 自包含运行目录使用 Go 编译的 `LazyMind.exe` 替代 `LazyMind.bat`：
+
+- 使用 `-ldflags "-H=windowsgui"` 编译，隐藏控制台窗口，用户双击后不出现 cmd 终端。
+- 通过 `goversioninfo` 嵌入 Windows 资源（应用图标、版本信息、文件描述）。
+- 应用图标使用 LazyMind 懒猫主题 `.ico` 文件（多分辨率：16x16、32x32、48x48、256x256）。
+- 启动流程与原 bat 文件等价：设置环境变量 → 启动必要 Go/Python 后端（隐藏窗口）→ 轮询健康检查 → 启动 `electron.exe` → 等待 Electron 退出 → 清理后端进程树。
+- 子进程使用 `CREATE_NO_WINDOW` 标志启动，避免闪现控制台。
+- Electron 退出后清理后端进程树。
+
+Phase 1 输出目录为 `~/LazyMind_dev/`，目录内 `LazyMind.exe` 双击可启动，用于开发和人工验证。Phase 2 安装包阶段由 electron-builder 产出最终带签名或待签名的 `LazyMind.exe`（Electron 本体），此 Go launcher 仅用于自包含开发包和无安装器分发场景。
+
+### 3.17.4 开发构建入口
+
+Phase 1 需要提供 Windows 原生可用的开发构建入口：
+
+- Makefile target 名称为 `desktop-dev-windows-exe`。
+- 构建产物输出到 `~/LazyMind_dev/`，不写入系统根目录。
+- 每次 build 前自动终止旧 `LazyMind.exe`、Electron 和后端进程，避免文件被占用。
+- 每次 build 前清除旧 `~/LazyMind_dev/` 目录后重新生成。
+- Makefile 命令必须兼容 Windows，使用 PowerShell 或 Windows 原生命令，禁止依赖 `sed`、`sleep`、`grep` 等 Unix-only 工具。
+- PowerShell 7 下需要确保 Node.js、`npm`、`npx`、`pnpm` 等命令可解析。
+- Vite `outDir` 位于 project root 外时，构建命令必须带 `--emptyOutDir`，避免旧前端资源残留。
+- 仓库允许保留 gitignored 的本地开发配置文件；`make desktop-dev-windows-exe` 自动复制到输出目录，避免每次重建后手动配置模型。
+- 应用图标 `.ico` 从 `frontend/src/public/Lazy.png` 生成，存放到 `resources/icons/icon.ico` 并嵌入 exe。
+- Windows 脚本不得因 `> nul` 等重定向误生成实际 `nul` 文件，构建后需要检查输出目录。
+
+---
+
+# 4. 分两个阶段的落地计划
+
+本章只做任务拆分和依赖识别，不做工作量预估。新版阶段划分如下：
+
+- **Phase 1：功能实现**。合并原前两个阶段，目标是在本地 build 出自包含目录 `~/LazyMind_dev/` 和 `LazyMind.exe` 主程序，双击即可启动，并在功能层面等效大部分 Web 版。
+- **Phase 2：打安装包**。目标是在 Phase 1 功能完成基础上生成 Windows installer，完成干净环境安装、升级、卸载、签名和 CI artifact。
+
+## 4.1 Phase 1：功能实现
+
+### 4.1.1 阶段目标
+
+Phase 1 目标是在开发机和目标 Windows 环境上跑通真实 Desktop 功能闭环，并产出无需 Docker、无需开发环境的自包含运行目录。
+
+Phase 1 重点包括：
+
+- Electron 桌面壳。
+- 前端资源通过自定义协议加载。
+- 本地 Go/Python 后端启动、健康检查和关闭。
+- 本地 API 代理与当前助手身份注入。
+- 自包含输出目录 `~/LazyMind_dev/`。
+- `~/LazyMind_dev/LazyMind.exe` 双击启动，无控制台窗口。
+- 免登录。
+- 默认 AI 助手初始化。
+- 新建和切换 AI 助手。
+- 系统管理、技能、问答、知识库、模型配置围绕当前助手工作。
+- 登录、复杂 RBAC、用户角色管理、Evo 等不进入 Desktop 主界面。
+- SQLite 关系库完整可用。
+- Milvus Lite 作为默认向量存储完整接入。
+- SegmentStore 本地实现完整接入。
+- 文档扫描、解析、索引、问答形成真实流程。
+- 模型配置复用 `/model-providers` 页面。
+- 日志、诊断、安全基线、功能、性能、稳定性验证通过。
+
+### 4.1.2 Phase 1 任务拆分
+
+#### A. Desktop 工程骨架
+
+- 新增 Desktop 工程入口。
+- 注册 Desktop Renderer 自定义协议。
+- 通过自定义协议加载前端构建产物。
+- 初始化本地数据目录。
+- 管理本地配置。
+- 建立本地日志目录。
+- 移除默认菜单栏。
+- 注册并处理 `lazymind:` 自定义协议，避免应用内链接触发 unsupported protocol。
+
+依赖：
+
+- 前端可构建为静态资源。
+- Electron 自定义协议能正确加载静态资源、处理前端路由 fallback 和 MIME type。
+- Electron 工程与现有 monorepo 构建不冲突。
+
+#### B. Windows 自包含开发构建
+
+- 提供 `make desktop-dev-windows-exe` target。
+- build 前自动终止旧进程。
+- build 前清除旧 `~/LazyMind_dev/`。
+- 构建前端、Electron Main/Preload、Go 后端、Python 后端或 Python 可执行目录。
+- 复制必要资源、默认文档、模板配置、gitignored 本地开发配置到输出目录。
+- 生成或复制 `LazyMind.exe` GUI 子系统启动器。
+- 从 `frontend/src/public/Lazy.png` 生成并嵌入 `resources/icons/icon.ico`。
+- Vite 输出到 repo root 外时使用 `--emptyOutDir`。
+- Windows 脚本使用 PowerShell 或原生命令，不依赖 Unix-only 工具。
+- 兼容 PowerShell 7 下 PATH 变化，确保 `npm`、`npx`、`pnpm` 可用。
+- 构建后检查不会产生实际 `nul` artifact。
+
+依赖：
+
+- Desktop 工程骨架稳定。
+- 前端 Desktop build script 稳定。
+- Go / Python 后端具备 Windows 可执行产物或可执行目录构建方式。
+
+#### C. 本地进程管理
+
+- Electron 启动 Go core。
+- Electron 启动 auth-service。
+- Electron 启动必要 Python 算法、解析、处理和文档服务。
+- Electron 启动 scan-control-plane、file-watcher。
+- 统一健康检查。
+- 关闭应用时清理子进程。
+- 子进程不弹出控制台窗口。
+- 后端进程路径只从受控输出目录或资源目录解析。
+
+依赖：
+
+- 各服务具备 Desktop Mode 启动参数。
+- 各服务能输出健康状态。
+- 各服务日志可重定向。
+
+#### D. Local Proxy
+
+- 建立本地 API 统一入口。
+- 转发现有 API。
+- 支持 REST、SSE、上传、下载。
+- 注入当前助手身份。
+- 覆盖前端传入的 `X-User-ID` / `X-User-Id`，避免 Renderer 伪造身份。
+- 注入 `X-Desktop-Secret` 或等价本地 secret。
+- 对后端未启动或异常退出返回可理解错误。
+
+依赖：
+
+- 后端服务端口可配置。
+- 前端请求可切到相对路径或本地代理路径。
+
+#### E. 免登录、系统管理与默认助手
+
+- 首次启动创建默认组、默认权限、默认 AI 助手。
+- Desktop Mode 前端跳过登录页。
+- 设置页面去掉“前往登录”入口。
+- 当前助手状态可读取、可切换。
+- 新建 AI 助手时后台创建用户并绑定默认组和写权限。
+- “系统管理”在 Desktop Mode 下直接进入 AI 助手管理，不暴露登录态前置条件。
+- 前台将“用户”重命名为“AI 助手”，“新建用户”显示为“新建 AI 助手”。
+- 技能页面和问答页面可切换不同 AI 助手。
+
+依赖：
+
+- auth-service 能提供 Desktop 初始化能力。
+- 前端 auth facade 支持 Desktop Mode。
+- core 接受当前用户上下文。
+
+#### F. SQLite 完整改造
+
+- 完成 core migration SQLite 兼容。
+- 完成 auth-service SQLite 兼容。
+- 完成 scan-control-plane SQLite 兼容。
+- 完成算法管理表或文档任务表 SQLite 兼容。
+- 处理 PostgreSQL 专属语法。
+- 处理 SQLite WAL、busy timeout、foreign key。
+- 处理多进程写入边界。
+
+依赖：
+
+- 识别 PostgreSQL 专属 SQL。
+- 已确定 ORM 化或 migration 分支策略。
+- 已确定 DB ownership。
+
+#### G. Milvus Lite 完整接入
+
+- 验证 Windows 环境安装 Milvus Lite。
+- 验证 Milvus Lite 数据目录可放在用户数据目录。
+- 支持 collection 生命周期。
+- 支持向量写入、删除、更新、查询。
+- 支持索引重建。
+- 支持数据目录迁移和清理。
+- 支持故障恢复或重建提示。
+- 记录打包、依赖、性能、稳定性问题。
+
+依赖：
+
+- Python 环境和依赖管理可控。
+- 算法模块调用链已能配置 Desktop 向量后端。
+
+#### H. SegmentStore 本地实现
+
+- 复用现有 SegmentStore 体系。
+- 增加 Desktop 本地实现。
+- 识别当前 OpenSearch 直接调用点。
+- 收敛直接访问 OpenSearch 的代码路径。
+- 支持关键词检索、片段 metadata、top-k 和必要过滤条件。
+- 建立与 Cloud OpenSearch 路线的行为对照测试。
+
+依赖：
+
+- 梳理现有 SegmentStore 接口和实现位置。
+- 明确 Chat/RAG 所需检索接口。
+
+#### I. 算法与解析真实链路
+
+- parsing 接收本地文件并生成真实文档结构。
+- processor 处理解析任务和状态。
+- doc-service 读取本地文档与任务数据。
+- chat service 使用 Desktop 向量和片段检索结果。
+- Office/OCR/MinerU/PaddleOCR 按线上 API、mock server 或降级方式接入。
+- 评估 Python 服务拓扑，优先把适合共享生命周期的服务合并为 1-2 个 FastAPI 进程；chat service 可因长时间流式推理和模型依赖保持独立。
+- 合并服务必须服从 SQLite ownership 和日志边界，不能为了减少进程数重新引入共享写库或难以诊断的混合日志。
+- Evo 不作为主链路；Desktop UI 和主进程配置中不暴露 Evo 入口。
+
+依赖：
+
+- SQLite、Milvus Lite、SegmentStore 本地实现可用。
+- LazyLLM 相关依赖支持 Desktop 运行形态。
+
+#### J. 扫盘复用与路径权限
+
+- 前端提供添加扫描路径入口或复用现有入口。
+- Electron 提供选择目录能力。
+- 后端复用现有扫盘逻辑。
+- 扫描状态能在 UI 中展示。
+- 权限失败、系统目录、隐藏目录、网络盘等情况有可理解提示。
+
+依赖：
+
+- 现有扫盘逻辑可在本地路径下运行。
+- 文件权限失败有基本错误处理。
+
+#### K. 前端完整体验
+
+- AI 助手管理完整可用。
+- Assistant Switcher 在 Chat、技能、知识库、偏好、词汇等页面统一生效。
+- 文档扫描路径管理可用。
+- 文档解析和索引状态可见。
+- 模型配置复用 `/model-providers` 页面，支持包括 SiliconFlow 在内的已有 provider。
+- 本地服务错误、索引错误、模型错误可区分展示。
+- 当 mock 模型配置生效时显示 MockModelWarning，并链接到 `/model-providers`。
+- 隐藏登录、注册、用户角色管理、复杂 RBAC、Evo 等 Desktop 明确去除的入口。
+
+依赖：
+
+- 后端提供稳定状态接口。
+- Electron 提供 native 能力接口。
+
+#### L. Credential 与本地配置
+
+- 最终模型配置架构复用已有 inner/dynamic 机制。
+- 废弃 Desktop 专属本地模型配置文件作为产品方案。
+- inner 模式通过启动前配置文件预置模型。
+- dynamic 模式通过 GUI `/model-providers` 页面手动配置。
+- gitignored 本地开发配置只用于开发构建复制，不成为产品唯一配置路径。
+- 模型 API key 不进入日志和诊断包。
+- OS Credential Manager / DPAPI 可在 Phase 1 完成；如实现风险过高，必须至少保留清晰接口和 Phase 2 安装包验收项。
+
+依赖：
+
+- 模型配置页面可复用。
+- Electron IPC 或后端 credential bridge 边界明确。
+
+#### M. 日志与诊断
+
+- Electron 采集子进程日志。
+- 按模块写日志文件。
+- 前端提供打开日志目录或导出诊断包入口。
+- 诊断包包含服务状态和最近日志。
+
+依赖：
+
+- 各服务 stdout/stderr 或 log 文件路径可控。
+- 敏感信息脱敏规则明确。
+
+#### N. 运行环境迁移安全基线
+
+- 建立 Electron BrowserWindow 安全默认配置。
+- 建立 Preload / IPC 白名单。
+- Local Proxy 和本地后端只监听 localhost。
+- Local Proxy 与本地后端之间建立本地请求认证机制或等价防伪造机制。
+- 当前助手身份由受控层注入，避免普通前端代码随意伪造。
+- 选择目录、打开日志、导出诊断包等 native 能力需要参数校验和范围限制。
+- 子进程启动不使用 shell 拼接命令。
+- 日志和诊断包脱敏。
+- 自包含开发目录阶段即验证基本安全基线，不等到安装包阶段再补。
+- `.gitattributes` 明确换行规范：服务端代码 LF，Windows `.bat` / `.ps1` / Windows C 源码 CRLF，前端代码 LF，设计文档 LF。
+
+依赖：
+
+- Electron 工程骨架已建立。
+- Local Proxy 和 Process Manager 的职责边界已确定。
+- 日志目录、数据目录和诊断包范围已确定。
+
+#### O. 启动、资源与功能验收
+
+- 记录 Electron、core、auth-service、chat service、Milvus Lite、scan-control-plane 的启动耗时。
+- 记录各后端进程启动后的内存占用。
+- 验证首屏可见、核心可操作、完整能力就绪三个启动层级。
+- 验证创建 50 个以上 AI 助手后的创建、切换和隔离行为。
+- 验证默认约 100KB 太阳系 Markdown 样例文档进入扫描、解析、索引、问答流程。
+- 验证关闭应用后无子进程残留。
+- 验证重启应用后数据和上次选择的助手恢复。
+- 验证 Python 服务未就绪时，Chat、解析、扫盘等入口能展示明确状态，而不是空白或无响应。
+
+依赖：
+
+- Process Manager 已能采集健康检查和进程信息。
+- 前端已有基础服务状态展示。
+
+### 4.1.3 Phase 1 依赖顺序
+
+建议依赖顺序：
+
+1. Desktop 工程骨架。
+2. Windows 自包含开发构建入口。
+3. 本地数据目录与日志目录。
+4. 本地进程管理。
+5. Local Proxy。
+6. 运行环境迁移安全基线。
+7. SQLite 完整改造。
+8. Runtime Store 语义替换与关键状态持久化。
+9. 免登录、默认助手和系统管理改造。
+10. 前端 Desktop Mode、Assistant Switcher 和页面隐藏。
+11. Milvus Lite 完整接入。
+12. SegmentStore 本地实现。
+13. 算法与解析真实链路。
+14. 扫盘复用与路径权限。
+15. 模型配置复用和 credential 边界。
+16. 启动、资源、功能、稳定性验证。
+17. 诊断包与自包含目录修正。
+
+## 4.2 Phase 2：打安装包
+
+### 4.2.1 阶段目标
+
+Phase 2 目标是在 Phase 1 功能完整可运行和自包含目录可验证的基础上完成产品化分发。
+
+重点包括：
+
+- Windows 安装包。
+- 无开发环境运行。
+- 后端可执行文件随包分发。
+- Python 依赖和 Milvus Lite 可随包运行。
+- 用户数据目录与安装目录分离。
+- 升级、卸载、诊断能力可用。
+- Cloud artifact 不受 Desktop 发布链路影响。
+- GitHub CI 可以生成可追溯的 Windows installer artifact，并为后续正式发布打基础。
+
+### 4.2.2 安装包任务拆分
+
+#### A. 前端与 Electron 打包
+
+- 构建 Desktop Renderer。
+- 打包 Electron Main/Preload。
+- 配置应用图标、名称、版本号。
+- 生成 Windows installer。
+
+依赖：
+
+- Desktop 工程骨架稳定。
+- 前端 Desktop Mode 构建稳定。
+
+#### B. Go 后端打包
+
+- 编译 Windows exe。
+- 放入安装包资源目录。
+- Electron 启动时定位 exe。
+- 处理 stdout/stderr 和退出码。
+
+依赖：
+
+- Go 服务 Desktop Mode 配置稳定。
+- 独立 exe 运行通过。
+
+#### C. Python 后端打包
+
+- 选择 PyInstaller、Nuitka 或其他打包方式。
+- 打包 auth-service、algorithm/chat、parsing、processor、doc-service 等。
+- 打包 LazyLLM 相关依赖。
+- 打包 Milvus Lite 运行依赖。
+- 验证资源文件定位、动态 import、模型配置、证书等。
+
+依赖：
+
+- Phase 1 Python 依赖已验证。
+- Milvus Lite Phase 1 验证可接受。
+
+#### D. 用户数据与升级
+
+- 首次启动复制默认配置到用户数据目录。
+- 升级时保留用户数据。
+- 升级时执行必要 migration。
+- 卸载时默认保留用户数据，可提供清理选项。
+
+依赖：
+
+- 本地数据目录结构稳定。
+- migration 策略稳定。
+
+#### E. 诊断与崩溃处理
+
+- 安装包环境下日志路径正确。
+- 崩溃文件可收集。
+- 诊断包可导出。
+- 后端异常退出可展示给用户。
+
+依赖：
+
+- Phase 1 日志体系已建立。
+
+#### F. 干净环境验证
+
+- 干净 Windows 环境安装。
+- 无 Docker 环境运行。
+- 无 Python/Go/Node 环境运行。
+- 普通用户权限运行。
+- 中文路径、空格路径运行。
+- Windows Defender / 签名相关验证。
+- 升级安装验证。
+- 卸载验证。
+
+依赖：
+
+- 安装包生成稳定。
+- 后端资源定位稳定。
+
+#### G. GitHub CI 打包发布
+
+- 使用 GitHub Actions 建立 Windows Desktop installer 构建 workflow。
+- workflow 负责构建前端、打包 Electron Main/Preload、编译 Go exe、打包 Python 后端、组装 installer。
+- release tag 或手工 dispatch 可触发产物上传，PR 阶段可只产出临时 artifact。
+- CI 产物需要附带版本号、commit SHA、构建日志和校验和。
+- 签名证书、发布 token、自动更新密钥通过 GitHub Actions Secrets 管理；正式签名和自动更新策略留到后续 LLD 细化。
+
+依赖：
+
+- 安装包本地构建命令稳定。
+- Windows runner 能缓存 npm、Go、Python / uv 依赖并保持可复现。
+- GitHub CI 不影响 Cloud/Server Mode 的现有构建 workflow。
+
+---
+
+# 5. 每个阶段的方案设计
+
+## 5.1 Phase 1 功能实现方案设计
+
+### 5.1.1 Phase 1 架构
+
+```text
+Electron
+  ├─ Renderer: Desktop Mode 前端
+  ├─ Local Proxy
+  ├─ Process Manager
+  ├─ Log Collector
+  └─ Data Directory Manager
+
+Local Processes
+  ├─ core: SQLite 完整业务链路
+  ├─ auth-service: desktop auth provider + 默认助手初始化
+  ├─ algorithm service: chat / parsing / processor / doc APIs
+  ├─ scan-control-plane: 复用现有扫盘逻辑
+  └─ file-watcher
+
+Local Stores
+  ├─ SQLite: 完整关系数据和必要 Runtime Store 状态
+  ├─ Milvus Lite: 向量数据
+  ├─ SegmentStore: 本地片段 / 全文索引
+  ├─ local files
+  └─ logs
+
+~/LazyMind_dev/
+  ├─ LazyMind.exe
+  ├─ electron/
+  ├─ renderer/
+  ├─ bin/
+  ├─ python-services/
+  ├─ resources/
+  └─ config/
+```
+
+### 5.1.2 Phase 1 技术设计要点
+
+#### Electron
+
+- 新增 Desktop 工程。
+- 启动主窗口。
+- 通过 Electron 自定义协议加载 Desktop Renderer 主 UI。
+- 启动后端进程。
+- 等待健康检查。
+- 提供本地代理。
+- 维护当前助手 ID。
+- 采集日志。
+- 初始化用户数据目录。
+- 完全移除默认菜单栏。
+- 处理 `lazymind:` 自定义协议。
+
+#### 前端
+
+- Desktop Mode 下跳过登录页。
+- 显示 AI 助手管理入口。
+- 提供全局顶部 Assistant Switcher。
+- Chat 页面使用当前助手。
+- 技能页面使用当前助手。
+- 请求统一走 Local Proxy。
+- 提供本地服务状态展示。
+- 隐藏登录、注册、复杂 RBAC、用户角色管理、Evo 等入口。
+- 复用 `/model-providers` 页面作为模型配置入口。
+
+#### auth-service
+
+- Desktop Mode 下支持免登录。
+- 首次启动创建默认 AI 助手。
+- 创建默认组和默认写权限。
+- 新建 AI 助手时创建后台用户，字段与现有新建用户保持一致。
+- 保留 RBAC 表和权限检查所需数据。
+
+#### core
+
+- 支持 SQLite 完整业务数据。
+- 使用当前 `X-User-Id` 表示当前助手。
+- 支持 Chat / 技能 / 会话 / 知识库等主入口所需 API。
+- Redis 相关能力在 Desktop Mode 下通过 Runtime Store 替换，必要状态持久化到 SQLite 或等价本地存储。
+
+#### algorithm
+
+- 提供真实解析、索引、检索和问答链路。
+- 测试和开发默认配置可使用 mock LLM / embedding server。
+- Chat 在 mock 配置生效时提示用户当前模型配置处于 mock 状态，并引导到 `/model-providers` 配置真实模型。
+- Office/OCR 默认走 mock server、线上 API 或明确降级提示；用户沿用模型配置界面自行配置真实线上 API 或本地能力。
+- Milvus Lite 与 SegmentStore 必须接入真实数据链路。
+
+#### Milvus Lite
+
+Phase 1 对 Milvus Lite 的目标是“验证并接入真实向量链路”。
+
+验证内容包括：
+
+- Windows 安装。
+- Python 依赖解析。
+- 本地数据目录读写。
+- collection 创建和删除。
+- 向量写入和查询。
+- 进程退出与重启后的数据可用性。
+- 初步打包可行性。
+- 与现有算法调用链的接口适配成本。
+
+Phase 1 暂不设计其他向量方案。如果验证不理想，再根据实测问题更新 HLD。
+
+#### SegmentStore
+
+目标是：
+
+- 明确现有 SegmentStore 可复用边界。
+- 不新增不必要的新抽象。
+- 提供 Desktop 本地实现。
+- 识别直接 OpenSearch 调用点。
+- 支持 Chat/RAG 所需片段检索。
+
+#### 扫盘
+
+- 复用现有扫盘逻辑。
+- Electron 提供选择目录。
+- 前端让用户显式添加扫描路径。
+- 不默认全盘扫描。
+- 扫描、解析、索引状态在 UI 中可见。
+
+#### Windows 自包含目录
+
+- `make desktop-dev-windows-exe` 生成 `~/LazyMind_dev/`。
+- `~/LazyMind_dev/LazyMind.exe` 是唯一人工验证入口。
+- 构建前自动 clean，并清理旧进程。
+- 构建脚本使用 Windows 原生命令或 PowerShell。
+- 本地开发配置可通过 gitignored 文件复制到输出目录。
+- 输出目录不应包含多余 `nul` 文件。
+- 输出文件数量应持续治理；默认 1 万+ 文件的情况需要通过排除 dev dependencies、合并小文件、tree-shaking 等方式优化。
+
+#### Phase 1 安全基线
+
+Phase 1 安全目标聚焦运行环境迁移，不处理算法/RAG 安全专题。
+
+Phase 1 必须建立以下安全基线：
+
+- BrowserWindow 使用安全默认配置：关闭 Node.js integration，启用 context isolation，不关闭 webSecurity。
+- Preload 只暴露最小白名单 API。
+- IPC handler 校验 sender、参数 schema 和路径范围。
+- Local Proxy 与后端服务只监听 localhost。
+- Desktop Renderer 主 UI 通过自定义协议加载，不通过 localhost Web 服务承载。
+- 本地后端 API 不直接暴露给局域网。
+- 当前助手身份由 Local Proxy 或受控请求层注入。
+- 本地后端对关键请求校验启动时生成的 secret / 随机 token。
+- 选择目录、打开日志、导出诊断包等能力不接受任意未校验路径。
+- 子进程启动不使用 shell 拼接命令。
+- 日志和诊断包默认脱敏，尤其必须脱敏模型 key。
+- Phase 1 阶段密钥如暂时明文写在开发配置文件中，也不得进入日志和诊断包；Credential Manager / DPAPI 优先在 Phase 1 完成，如未完成必须在 Phase 2 安装包验收中保留明确项。
+
+### 5.1.3 Phase 1 验收口径
+
+Phase 1 可接受：
+
+- 模型配置默认是 mock server / mock backend。
+- Chat 中提示用户当前处于 mock 状态，并引导用户到模型配置界面配置真实模型。
+- Office/OCR 能力缺失、走 mock server、线上 API 或明确降级提示。
+- Evo 缺失。
+- 自包含开发目录不签名。
+- 密钥明文写在开发配置文件中，但日志和诊断包必须脱敏。
+
+Phase 1 不可接受：
+
+- 需要 Docker 才能启动桌面端。
+- 需要用户手工启动后端服务。
+- 打开应用仍要求登录。
+- 无法创建或切换 AI 助手。
+- 当前助手身份无法传到后端。
+- 没有 `~/LazyMind_dev/LazyMind.exe` 作为双击启动入口。
+- 关闭应用后子进程残留。
+- 没有日志可诊断。
+- Milvus Lite 未接入真实向量链路。
+- SQLite 未覆盖真实业务数据。
+- SegmentStore 没有 Desktop 本地实现。
+- 默认太阳系 Markdown 示例文档无法进入扫描、解析、索引、问答流程。
+- Renderer 获得不必要的 Node.js、shell 或文件系统能力。
+- Local Proxy 或本地后端默认暴露到局域网。
+- 关键本地 API 只靠可伪造的前端 header 判断身份。
+- 诊断包包含明文密钥、模型 key、token 或用户文档正文。
+
+## 5.2 Phase 2 安装包方案设计
+
+### 5.2.1 安装包架构
+
+```text
+C:\Program Files\LazyMind\
+  LazyMind.exe
+  resources\
+    app.asar
+    renderer\
+    bin\
+      core.exe
+      scan-control-plane.exe
+      file-watcher.exe
+      auth-service\
+      algorithm-chat\
+      algorithm-parsing\
+      algorithm-processor\
+      doc-service\
+    templates\
+      default_config.yaml
+      runtime_models.yaml
+
+%APPDATA%\LazyMind\
+  config.yaml
+  data\
+  vector\
+    milvus-lite\
+  segment\
+  uploads\
+  scanned\
+  cache\
+  logs\
+  backups\
+```
+
+### 5.2.2 安装包技术设计要点
+
+#### 应用目录与用户数据目录分离
+
+- 安装目录只放应用程序和只读资源。
+- 用户数据目录放配置、数据库、向量数据、索引、上传文件、日志、缓存。
+- 升级应用不覆盖用户数据。
+- 卸载默认保留用户数据，提供可选清理。
+
+#### 后端分发
+
+- Go 服务以 exe 分发。
+- Python 服务以可执行目录或单文件形式分发。
+- Milvus Lite 依赖随 Python 服务一起验证和分发。
+- Electron 根据相对资源路径定位后端。
+
+#### 运行环境
+
+安装包必须能在以下环境运行：
+
+- 无 Docker。
+- 无 Node。
+- 无 Go。
+- 无 Python。
+- 普通用户权限。
+- 中文路径。
+- 空格路径。
+
+#### 签名与安全
+
+- Phase 1 自包含目录不要求签名；Windows installer 签名放到 Phase 2 安装包阶段考虑。
+- 后端 exe 和 Python 打包产物需要考虑安全软件误报。
+- 本地端口默认只监听 localhost。
+- 日志和诊断包脱敏。
+
+#### 升级与 migration
+
+- 应用升级时检测数据版本。
+- 执行必要 migration。
+- migration 失败时保留日志和恢复提示。
+- 用户数据应可备份。
+
+#### GitHub CI 打包发布
+
+Phase 2 需要建立 GitHub Actions 作为标准打包入口，但本 HLD 不展开完整发布治理。
+
+初步设计：
+
+- 新增独立 Desktop Windows workflow，例如 `desktop-windows.yml`，避免污染 Cloud/Server Mode 的 Docker 构建。
+- 触发方式包括手工 `workflow_dispatch`、release tag、必要时的 PR smoke。
+- Windows runner 执行依赖恢复、前端构建、Electron 打包、Go exe 编译、Python 后端打包和 installer 组装。
+- PR smoke 可以只验证构建链路并上传短期 artifact；release tag 触发的构建上传安装包、校验和和构建元数据。
+- 产物命名包含应用版本、commit SHA、目标平台和架构。
+- workflow 输出构建日志、依赖锁文件摘要、installer SHA256、后端 exe / Python 包版本清单。
+- 签名证书、发布 token、自动更新密钥只通过 GitHub Actions Secrets 注入；Phase 2 早期可以先生成未签名包，正式签名策略在 Windows 安装包 LLD 中细化。
+- CI 缓存 npm、Go、Python / uv 依赖，但缓存命中不能影响构建可复现性。
+
+### 5.2.3 安装包验收口径
+
+安装包阶段应验证：
+
+- 干净 Windows 安装。
+- 首次启动初始化。
+- 创建助手。
+- 添加文档路径。
+- 构建知识库。
+- 发起问答。
+- 关闭应用后子进程退出。
+- 重启后数据保留。
+- 升级安装数据不丢失。
+- 卸载行为符合预期。
+- 诊断包可导出。
+- Cloud/Server Mode 构建不受影响。
+- GitHub CI 能生成 Windows installer artifact，并附带校验和、commit SHA 和构建日志。
+
+---
+
+# 6. 关键设计决议汇总
+
+## 6.1 产品与身份
+
+- 用户可见产品名、窗口标题、安装包、菜单、提示文案统一使用 LazyMind。
+- 用户不可见的内部实现尽量少改动，必要时可沿用 LazyRAG 命名。
+- Desktop Mode 前台展示 AI 助手，不展示管理员 / 普通用户。
+- 默认首个 AI 助手为“天文学家 🪐”。
+- 默认提供约 100KB 的太阳系知识 Markdown 示例文档。
+- 后台每个 AI 助手仍是普通用户。
+- 新建 AI 助手字段与现有新建用户保持一致。
+- Assistant Switcher 是全局顶部组件。
+- 所有 AI 助手平级。
+- 当前助手就是当前请求用户。
+- 不引入主用户 / 子用户。
+- 不引入 actor / effective user 双身份模型。
+
+## 6.2 权限
+
+- 不删除 RBAC。
+- 隐藏复杂 RBAC UI。
+- 自动创建默认组、默认角色、默认写权限。
+- 新建助手自动加入默认组并具备写权限。
+
+## 6.3 网关
+
+- Desktop Mode 不使用 Kong。
+- Electron Local Proxy 替代桌面端 API Gateway 职责。
+- Cloud/Server Mode 继续保留 Kong。
+
+## 6.4 数据与中间件
+
+- PostgreSQL -> SQLite。
+- SQLite 默认按服务 ownership 拆分 DB 文件，避免多个后端进程共同写同一个 SQLite 文件。
+- Redis -> Desktop Runtime Store，本地实现不能简单等同于 `sync.Map`。
+- Runtime Store 必须覆盖 Chat 状态、流式片段 replay、取消信号、短生命周期关联记录等 Redis 语义。
+- Milvus -> Milvus Lite，Phase 1 和 Phase 2 都暂定默认使用。
+- Milvus Lite Phase 1 必须有 Go / No-Go 量化判定。
+- OpenSearch -> 现有 SegmentStore 体系下的 Desktop 本地实现。
+- 暂不并行设计 LanceDB/Qdrant 等替代方案；只有 Milvus Lite Phase 1 验证不理想时再更新方案。
+
+## 6.5 解析与算法
+
+- Phase 1 需要跑通真实本地数据链路，测试和默认开发配置可使用 mock server / mock backend。
+- Chat 在 mock 状态下提示用户到模型配置界面配置真实模型。
+- Phase 1 不强制内置 Office/OCR/MinerU/PaddleOCR。
+- Office/OCR 默认走 mock server，后续沿用模型配置界面由用户配置真实 API 或本地能力。
+- Desktop 可使用线上 API 降低本地依赖和包体。
+- Evo Phase 1 剪掉 Desktop UI 和主链路入口。
+
+## 6.6 扫盘
+
+- 用户前端指定扫描路径。
+- 不默认全盘扫描。
+- Phase 1 复用现有扫盘逻辑。
+- 后续扫盘功能重写后再适配。
+
+## 6.7 日志与可观测性
+
+- Phase 1 使用现有 log 体系并由 Electron 统一归档。
+- OpenTelemetry 后续再接入。
+- Electron 负责收集子进程日志和导出诊断包。
+- 诊断包必须脱敏模型 key。
+
+## 6.8 共存
+
+- 单仓库双模式。
+- Desktop Mode 通过显式开关启用。
+- Cloud 默认行为不变。
+- Desktop 构建和依赖不污染 Cloud 构建。
+- GitHub Actions 可作为 Phase 2 Windows installer 的标准打包发布入口。
+- macOS 不是本方案重点，只做低成本预留，不进入 Windows Phase 1 核心验收。
+
+---
+
+# 7. 风险与验证点
+
+## 7.1 Milvus Lite Windows 验证风险
+
+虽然当前决议是在 Phase 1 和 Phase 2 都暂定 Milvus Lite，但它仍是最关键的早期验证点。
+
+必须验证：
+
+- Windows 安装可行性。
+- Python 打包可行性。
+- 用户数据目录读写可行性。
+- collection 生命周期。
+- 重启恢复。
+- 性能和稳定性。
+- 与现有 LazyRAG/LazyLLM 调用链的适配成本。
+
+如果 Phase 1 验证不理想，应基于具体失败原因更新方案，而不是在 HLD 中提前分散主线；本方案不要求预先定义额外的决策流程或测试报告模板。
+
+## 7.2 SQLite 迁移风险
+
+风险：
+
+- PostgreSQL 专属 SQL 导致 SQLite migration 失败。
+- 多进程写入导致锁冲突。
+- ORM 和手写 SQL 混用导致双数据库行为不一致。
+
+缓解：
+
+- Phase 1 先解除启动阻塞，再完成完整 migration 策略。
+- 双模式测试 PostgreSQL 和 SQLite。
+
+## 7.3 Runtime Store 语义缺失风险
+
+风险：
+
+- Redis 的 TTL、List、阻塞等待、取消信号等语义被低估。
+- Chat 流式输出、取消、状态恢复异常。
+
+缓解：
+
+- 抽象 Runtime Store。
+- 对每个语义单独列测试。
+- Desktop Phase 1 可以先用内存实现解除 Redis 启动阻塞，但不能把语义删除；需要重启恢复的状态必须持久化。
+
+## 7.4 身份串号风险
+
+风险：
+
+- 切换助手后前端显示和后端请求不一致。
+- 会话、技能、知识库串助手。
+
+缓解：
+
+- 当前助手就是当前用户。
+- 统一 Assistant Switcher。
+- 统一请求上下文注入。
+- 建立助手隔离测试。
+
+## 7.5 Python 打包风险
+
+风险：
+
+- LazyLLM、Milvus Lite、OCR、Office 转换依赖打包失败。
+- 动态 import、资源文件、证书路径在安装包中失效。
+
+缓解：
+
+- Phase 1 起做打包 smoke。
+- 重型依赖分级接入。
+- Office/OCR 可走线上 API 或降级。
+
+## 7.6 Cloud 回归风险
+
+风险：
+
+- Desktop 改造破坏 Cloud 登录、Kong、RBAC、PostgreSQL、Redis、Milvus、OpenSearch 路线。
+
+缓解：
+
+- 显式模式开关。
+- 双构建入口。
+- 双 CI 矩阵。
+- Cloud 默认行为不变。
+
+## 7.7 扫盘权限风险
+
+风险：
+
+- 用户选择无权限目录。
+- 扫描过多文件导致性能问题。
+- Windows/macOS 权限语义不同。
+
+缓解：
+
+- 用户显式选择路径。
+- Phase 1 复用现有逻辑。
+- 权限失败可见。
+- 后续扫盘重写再优化。
+
+## 7.8 Renderer 权限扩大风险
+
+风险：
+
+- 云端前端代码迁移到 Electron 后，如果 Renderer 获得 Node.js、shell、文件系统或原始 IPC 能力，普通 XSS 或前端漏洞可能升级成本机权限问题。
+
+缓解：
+
+- 关闭 Node.js integration。
+- 启用 context isolation 和 sandbox。
+- Preload 只暴露白名单 API。
+- 不加载不可信远程页面作为主 UI。
+- 配置 CSP 并限制 navigation、new window 和外部链接。
+
+## 7.9 IPC 越权风险
+
+风险：
+
+- Renderer 通过 IPC 调用 Main Process 执行高权限动作，例如任意读写文件、打开任意路径、导出敏感数据或控制本地服务。
+
+缓解：
+
+- IPC API 业务语义化、白名单化。
+- IPC handler 校验 sender、参数 schema、路径范围和操作权限。
+- 不暴露原始 `ipcRenderer` 和通用命令执行能力。
+
+## 7.10 Localhost API 被伪造调用风险
+
+风险：
+
+- 其他本机程序或浏览器网页直接请求 localhost API，伪造 `X-User-Id` 或触发扫描、删除、导出等操作。
+
+缓解：
+
+- 本地服务只监听 `127.0.0.1`。
+- Local Proxy 与后端服务之间使用启动时生成的本地 secret 或等价机制。
+- CORS 限制为 Desktop Renderer 自定义协议 origin。
+- 当前助手身份由受控层注入，后端不无条件信任前端 header。
+
+## 7.11 子进程与路径劫持风险
+
+风险：
+
+- Electron 启动后端进程时被命令注入，或后端二进制路径被替换，导致执行非预期程序。
+
+缓解：
+
+- 启动子进程不使用 `shell: true`。
+- 使用固定资源目录解析可执行文件。
+- 命令行参数数组化，不拼接 shell 字符串。
+- 环境变量白名单化。
+- 安装包阶段考虑二进制完整性校验和安装目录权限。
+
+## 7.12 密钥与诊断包泄露风险
+
+风险：
+
+- 在线 API key、本地服务 secret、token、用户文档正文或敏感路径进入日志和诊断包。
+
+缓解：
+
+- 日志和诊断包统一脱敏。
+- Phase 1 阶段如暂时允许密钥明文写在开发配置文件中，必须确保不进入日志和诊断包。
+- Windows Credential Manager / DPAPI 等 OS 级安全存储方案优先在 Phase 1 接入；如未完成，进入 Phase 2 安装包验收项。
+- 诊断包只包含配置摘要、服务状态、版本号、最近日志和崩溃信息。
+- 诊断包必须脱敏模型 key。
+- 用户文档正文默认不进入诊断包。
+
+## 7.13 安装包与供应链风险
+
+风险：
+
+- Electron、Node、Python、Go、Milvus Lite、npm/pip/go module 依赖或自动更新链路引入供应链风险。
+
+缓解：
+
+- 依赖锁定版本。
+- 建立 Desktop 独立依赖扫描。
+- Phase 1 自包含目录不要求签名。
+- Phase 2 安装包阶段再考虑 Windows installer 和更新包签名与完整性校验。
+- 自动更新使用 HTTPS 和签名校验。
+- 签名证书和发布 token 独立保护。
+
+## 7.14 冷启动与资源占用风险
+
+风险：
+
+- Electron、Go 后端、多个 Python 服务、Milvus Lite、扫描服务同时启动，导致首屏空白或可操作时间过长。
+- Python 打包产物和向量/解析依赖导致内存占用超过普通 Windows 设备预期。
+- 非首屏必需服务阻塞主窗口事件循环，造成用户无法关闭或诊断。
+
+缓解：
+
+- 分层启动，优先展示主窗口、状态和核心入口。
+- Python chat、parsing、processor、scan 等服务异步启动，并在对应功能入口展示 ready / loading / failed 状态。
+- Phase 1 起记录启动耗时、健康检查耗时和各进程内存占用。
+- Phase 1 基于 smoke 数据评估 Python 服务合并和懒启动策略。
+
+## 7.15 GitHub CI 打包发布风险
+
+风险：
+
+- Windows runner、Electron 打包、Go 交叉编译、Python 冻结工具和 Milvus Lite 依赖组合导致 CI 构建不可复现。
+- 签名证书、发布 token、自动更新密钥管理不当导致供应链风险。
+- Desktop installer 构建污染 Cloud/Server Mode 现有 CI。
+
+缓解：
+
+- Desktop Windows workflow 独立于 Cloud/Server Mode workflow。
+- 产物附带 commit SHA、版本号、构建日志、依赖摘要和 SHA256。
+- Secrets 只通过 GitHub Actions Secrets 注入，不写入仓库或日志。
+- PR 阶段只做 smoke artifact，release tag 阶段再执行正式发布路径。
+
+---
+
+# 8. 后续 LLD 拆分建议
+
+新版 LLD 按两阶段组织。
+
+Phase 1 功能实现建议覆盖：
+
+1. Electron Desktop Shell 与自定义协议加载。
+2. Windows 自包含开发构建与 `LazyMind.exe` launcher。
+3. 本地进程管理。
+4. Local Proxy 与当前助手身份注入。
+5. Desktop Auth Provider、系统管理改造与 AI 助手模型。
+6. SQLite complete migration / ORM 兼容。
+7. Runtime Store 与 Redis 语义替换。
+8. Milvus Lite Windows 验证与完整接入。
+9. SegmentStore Desktop 本地实现。
+10. Python 算法、解析、索引和 Chat/RAG 链路。
+11. 前端 Desktop Mode、Assistant Switcher、页面隐藏与 `/model-providers` 复用。
+12. 扫盘路径选择与权限处理。
+13. Credential、模型配置和密钥脱敏。
+14. 日志、诊断包、崩溃收集和运行环境迁移安全。
+15. 启动体验、资源预算、功能/性能/稳定性测试。
+
+Phase 2 打安装包建议覆盖：
+
+1. Windows installer 与 electron-builder。
+2. Go/Python 后端打包和资源定位。
+3. 用户数据目录、升级、卸载与 migration。
+4. 签名、完整性校验、自动更新和供应链安全。
+5. 干净 Windows 环境验证。
+6. Cloud/Desktop 双模式 CI 与 GitHub Actions artifact 发布。
+
+---
