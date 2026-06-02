@@ -35,6 +35,7 @@ import {
   isDeveloperModeActive,
   setDeveloperModeActive,
 } from "@/utils/developerMode";
+import { isEvoModeEnabled } from "@/utils/evoMode";
 import RecordList from "@/modules/chat/components/RecordList";
 import {
   CHAT_RESUME_CONVERSATION_KEY,
@@ -92,6 +93,7 @@ export default function MainLayout() {
   const isLoggedIn = Boolean(userInfo?.token);
   const userName = userInfo?.username || "";
   const isAdminUser = isAdminRole(userInfo?.role);
+  const evoModeEnabled = isEvoModeEnabled();
 
   const [currentSidebarConversationId, setCurrentSidebarConversationId] =
     useState(() => {
@@ -154,7 +156,7 @@ export default function MainLayout() {
       label: t("layout.memoryManagement"),
       icon: <AppstoreOutlined />,
     },
-    ...(isAdminUser && developerActive
+    ...(evoModeEnabled && isAdminUser && developerActive
       ? [
           {
             key: "/self-evolution",
@@ -239,10 +241,10 @@ export default function MainLayout() {
   }, [developerActive, isAdminUser]);
 
   useEffect(() => {
-    if (pathname.startsWith("/self-evolution") && (!isAdminUser || !developerActive)) {
+    if (pathname.startsWith("/self-evolution") && (!evoModeEnabled || !isAdminUser || !developerActive)) {
       navigate("/agent/chat", { replace: true });
     }
-  }, [pathname, isAdminUser, developerActive, navigate]);
+  }, [pathname, evoModeEnabled, isAdminUser, developerActive, navigate]);
 
   useEffect(() => {
     if (!pathname.startsWith("/agent/chat")) {

@@ -29,9 +29,11 @@ import MemoryExperienceDetailPage from "@/modules/memory/pages/experienceDetail"
 import ModelProviderPage from "@/modules/admin/pages/modelProvider";
 import { SelfEvolutionHomePage, SelfEvolutionDetailPage } from "@/modules/selfEvolution";
 import { getAntdLocale } from "@/i18n/antdLocale";
+import { isEvoModeEnabled } from "@/utils/evoMode";
 
 export default function AppRouter() {
   const { i18n } = useTranslation();
+  const evoModeEnabled = isEvoModeEnabled();
 
   return (
     <ConfigProvider locale={getAntdLocale(i18n.resolvedLanguage || i18n.language)}>
@@ -86,9 +88,15 @@ export default function AppRouter() {
               element={<MemoryReviewPage />}
             />
           </Route>
-          <Route path="self-evolution" element={<SelfEvolutionHomePage />} />
-          <Route path="self-evolution/detail/:threadId" element={<SelfEvolutionDetailPage />} />
-          <Route path="self-evolution/:threadId" element={<SelfEvolutionDetailPage />} />
+          {evoModeEnabled ? (
+            <>
+              <Route path="self-evolution" element={<SelfEvolutionHomePage />} />
+              <Route path="self-evolution/detail/:threadId" element={<SelfEvolutionDetailPage />} />
+              <Route path="self-evolution/:threadId" element={<SelfEvolutionDetailPage />} />
+            </>
+          ) : (
+            <Route path="self-evolution/*" element={<Navigate to="/agent/chat" replace />} />
+          )}
         </Route>
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="groups" replace />} />

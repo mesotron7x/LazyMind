@@ -348,6 +348,7 @@ services:
       context: ./frontend
       args:
         <<: *mirror-args
+        VITE_LAZYMIND_EVO_MODE: ${LAZYMIND_EVO_MODE:-true}
     ports:
       - "${LAZYMIND_FRONTEND_PORT:-8090}:80"
     expose:

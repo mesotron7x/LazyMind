@@ -4,7 +4,9 @@ WORKDIR /app
 
 ARG ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
 ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG VITE_LAZYMIND_EVO_MODE=true
 ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
+ENV VITE_LAZYMIND_EVO_MODE=${VITE_LAZYMIND_EVO_MODE}
 
 RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR}|g" /etc/apk/repositories \
     && corepack enable \
