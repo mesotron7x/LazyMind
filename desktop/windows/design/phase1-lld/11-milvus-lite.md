@@ -1,12 +1,10 @@
-# LLD-02: Milvus Lite Full Integration
-
-> Stage note: this detailed feature LLD was written for the old Phase 2 Complete Features stage. In the new two-phase plan, this work belongs to Phase 1 功能实现. New Phase 2 is packaging only.
+# LLD-11: Milvus Lite Full Integration
 
 ## 1. Module Overview
 
 ### 1.1 Goal
 
-Integrate Milvus Lite as the production vector store for Desktop Mode. Phase 1 validated installation and basic CRUD. Phase 2 connects Milvus Lite to the real document vectorization and RAG query pipelines, handles collection lifecycle, supports index rebuild, and ensures data persistence across application restarts.
+Integrate Milvus Lite as the production vector store for Desktop Mode. Phase 1 directly connects Milvus Lite to the real document vectorization and RAG query pipelines, handles collection lifecycle, supports index rebuild, and ensures data persistence across application restarts.
 
 ### 1.2 Scope
 
@@ -22,9 +20,9 @@ Integrate Milvus Lite as the production vector store for Desktop Mode. Phase 1 v
 - Performance baseline (P95 < 1s, P99 < 2s for top-k query per HLD).
 
 **Not Included:**
-- Document parsing itself (see LLD-04).
-- Embedding model selection/configuration (see LLD-04).
-- SegmentStore full-text search (see LLD-03).
+- Document parsing itself (see LLD-13).
+- Embedding model selection/configuration (see LLD-13).
+- SegmentStore full-text search (see LLD-12).
 
 ---
 
@@ -117,10 +115,10 @@ def create_vector_store() -> VectorStore:
 **Requires:**
 - Phase 1: Milvus Lite installable on Windows (validated).
 - Phase 1: Data directory structure (`getDataDir().vector`).
-- LLD-04: Embedding model produces vectors (but interface is defined here).
+- LLD-13: Embedding model produces vectors (but interface is defined here).
 
 **Depended on by:**
-- LLD-04 Algorithm Pipeline (uses VectorStore for indexing and retrieval).
+- LLD-13 Algorithm Pipeline (uses VectorStore for indexing and retrieval).
 
 ---
 
@@ -320,7 +318,7 @@ def close(self) -> None:
 - [ ] MilvusLiteStore passes all VectorStore protocol tests.
 - [ ] Data persists across process restart.
 - [ ] Multiple collections (per-assistant) are isolated.
-- [ ] Top-k search P95 < 1s with MVP target dataset.
+- [ ] Top-k search P95 < 1s with Phase 1 target dataset.
 - [ ] Insert + search end-to-end works with real embeddings.
 - [ ] Rebuild/recreation works without data loss in other collections.
 - [ ] Disk usage is reasonable (record baseline).

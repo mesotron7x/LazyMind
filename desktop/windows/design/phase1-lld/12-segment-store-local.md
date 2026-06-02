@@ -1,6 +1,4 @@
-# LLD-03: SegmentStore Local Implementation
-
-> Stage note: this detailed feature LLD was written for the old Phase 2 Complete Features stage. In the new two-phase plan, this work belongs to Phase 1 功能实现. New Phase 2 is packaging only.
+# LLD-12: SegmentStore Local Implementation
 
 ## 1. Module Overview
 
@@ -21,8 +19,8 @@ Implement a local SegmentStore backend for Desktop Mode that replaces OpenSearch
 - Identification and convergence of direct OpenSearch API calls.
 
 **Not Included:**
-- Vector similarity search (see LLD-02 Milvus Lite).
-- Document parsing logic (see LLD-04).
+- Vector similarity search (see LLD-11 Milvus Lite).
+- Document parsing logic (see LLD-13).
 - OpenSearch removal from Cloud mode.
 
 ---
@@ -95,7 +93,7 @@ func NewSegmentStore(mode string, dataDir string) (SegmentStore, error) {
 - Existing SegmentStore interface definition (or we define it here if none exists formally).
 
 **Depended on by:**
-- LLD-04 Algorithm Pipeline (uses SegmentStore for hybrid retrieval).
+- LLD-13 Algorithm Pipeline (uses SegmentStore for hybrid retrieval).
 
 ---
 
@@ -251,7 +249,7 @@ FTS5 `unicode61` tokenizer handles CJK characters by treating each character as 
 For improved Chinese tokenization (optional enhancement):
 - Use jieba segmentation at index time to add space-separated tokens.
 - Store segmented content in FTS table alongside original.
-- This is an optimization, not MVP-blocking.
+- This is an optimization and does not block the required Phase 1 functional loop.
 
 ### 4.5 Index Operation
 

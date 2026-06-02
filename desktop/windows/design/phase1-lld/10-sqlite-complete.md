@@ -1,12 +1,10 @@
-# LLD-01: SQLite Complete Migration
-
-> Stage note: this detailed feature LLD was written for the old Phase 2 Complete Features stage. In the new two-phase plan, this work belongs to Phase 1 功能实现. New Phase 2 is packaging only.
+# LLD-10: SQLite Complete Migration
 
 ## 1. Module Overview
 
 ### 1.1 Goal
 
-Complete the SQLite migration for all backend services so that Desktop Mode runs entirely on SQLite with zero PostgreSQL dependency. Phase 1 delivered minimum viable tables for core and auth-service. Phase 2 migrates every remaining table, handles all PG-specific SQL, verifies ORM compatibility, and establishes the multi-DB-file ownership model.
+Complete the SQLite migration for all backend services so that Desktop Mode runs entirely on SQLite with zero PostgreSQL dependency. Phase 1 owns the complete SQLite path in one delivery: it migrates every remaining table, handles all PG-specific SQL, verifies ORM compatibility, and establishes the multi-DB-file ownership model.
 
 ### 1.2 Scope
 
@@ -21,9 +19,9 @@ Complete the SQLite migration for all backend services so that Desktop Mode runs
 - Concurrent access testing within ownership boundaries.
 
 **Not Included:**
-- Milvus Lite vector storage (see LLD-02).
-- SegmentStore FTS implementation (see LLD-03).
-- Runtime Store persistence (see LLD-05).
+- Milvus Lite vector storage (see LLD-11).
+- SegmentStore FTS implementation (see LLD-12).
+- Runtime Store persistence (see LLD-14).
 
 ---
 
@@ -76,12 +74,12 @@ func RunUp() error
 ## 3. Dependencies
 
 **Requires:**
-- Phase 1 delivered: orm.Connect with SQLite, migration runner with SQLite support.
-- Phase 1 delivered: `getDataDir().data` path.
+- Phase 1 requirement: orm.Connect with SQLite, migration runner with SQLite support.
+- Phase 1 requirement: `getDataDir().data` path.
 
 **Depended on by:**
-- LLD-04 Algorithm Pipeline (needs algo.db tables).
-- LLD-05 Runtime Store Hardening (may persist to main.db).
+- LLD-13 Algorithm Pipeline (needs algo.db tables).
+- LLD-14 Runtime Store Hardening (may persist to main.db).
 
 ---
 
@@ -91,7 +89,7 @@ func RunUp() error
 
 #### 4.1.1 Table Inventory
 
-Phase 1 created `20260101000000_init.up.sql` with minimum tables. Phase 2 must include all remaining:
+Phase 1 must provide a complete migration set for all required tables:
 
 | Table | Purpose | PG-specific issues |
 |-------|---------|-------------------|
@@ -130,11 +128,11 @@ Phase 1 created `20260101000000_init.up.sql` with minimum tables. Phase 2 must i
 backend/core/migrations/sqlite/
   20260101000000_init.up.sql          — Phase 1 (exists)
   20260101000000_init.down.sql        — Phase 1 (exists)
-  20260201000000_complete_schema.up.sql   — Phase 2: all remaining tables
-  20260201000000_complete_schema.down.sql — Phase 2: drop added tables
+  20260201000000_complete_schema.up.sql   — Phase 1: all required Desktop tables
+  20260201000000_complete_schema.down.sql — Phase 1: rollback for required Desktop tables
 ```
 
-Single consolidated migration for Phase 2 additions. Not splitting per-table because Desktop has no existing production data to migrate incrementally.
+Single consolidated migration for the Phase 1 Desktop schema. Not splitting per-table because Desktop has no existing production data to migrate incrementally.
 
 #### 4.1.4 GORM Model Audit
 
@@ -185,7 +183,7 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
 
 ### 4.3 Scan-Control-Plane SQLite Completion
 
-Scan-control-plane already uses GORM with sqlite driver (Phase 1). Phase 2:
+Scan-control-plane uses GORM with the sqlite driver in Desktop Mode and must:
 - Verify all tables (sources, documents, tasks, mutations, leases) create correctly.
 - Verify scheduled task queries work with SQLite datetime functions.
 - Verify task claiming with row locking uses `busy_timeout` instead of PG advisory locks.

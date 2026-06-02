@@ -1,6 +1,4 @@
-# LLD-07: Credential & Secret Management
-
-> Stage note: this detailed feature LLD was written for the old Phase 2 Complete Features stage. In the new two-phase plan, this work belongs to Phase 1 功能实现. New Phase 2 is packaging only.
+# LLD-16: Credential & Secret Management
 
 ## 1. Module Overview
 
@@ -90,8 +88,8 @@ interface SecretInjection {
 - Phase 1: Local secret generation.
 
 **Depended on by:**
-- LLD-04 Algorithm Pipeline (model API keys for embedding/LLM calls).
-- LLD-06 Frontend (model config page stores keys via IPC).
+- LLD-13 Algorithm Pipeline (model API keys for embedding/LLM calls).
+- LLD-15 Frontend (model config page stores keys via IPC).
 
 ---
 
@@ -253,7 +251,7 @@ function validateAccountName(name: string) {
 
 ### 4.5 Local Secret Lifecycle
 
-Phase 1 generates `LOCAL_SECRET` and stores it in memory. Phase 2 persists it:
+Phase 1 generates and persists `LOCAL_SECRET` through the credential boundary:
 
 ```typescript
 // desktop/src/main/credentials/local-secret.ts
@@ -311,7 +309,7 @@ This route is:
 
 ### 4.8 Migration from Plaintext
 
-On first Phase 2 boot:
+On first Phase 1 boot:
 1. Check if `config.json` contains plaintext API keys.
 2. If yes: migrate each key to credential store.
 3. Replace plaintext values with `"__SECURE_STORE__"` sentinel.
@@ -441,7 +439,7 @@ No backend service env changes — secrets injected at runtime.
 - [ ] Local secret persists across application restart.
 - [ ] Backend services can retrieve API keys via credential bridge.
 - [ ] Fallback to encrypted file works when Credential Manager unavailable.
-- [ ] Migration from plaintext config works on first Phase 2 boot.
+- [ ] Migration from plaintext config works on first Phase 1 boot.
 - [ ] No secrets appear in log files or diagnostics export.
 - [ ] Credential IPC channels enforce sender validation.
 - [ ] Cloud mode unaffected (no credential service initialized).

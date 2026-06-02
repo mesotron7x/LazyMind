@@ -1,6 +1,4 @@
-# LLD-04: Algorithm & Parsing Pipeline
-
-> Stage note: this detailed feature LLD was written for the old Phase 2 Complete Features stage. In the new two-phase plan, this work belongs to Phase 1 功能实现. New Phase 2 is packaging only.
+# LLD-13: Algorithm & Parsing Pipeline
 
 ## 1. Module Overview
 
@@ -14,17 +12,17 @@ Connect the real document parsing, embedding, indexing, and RAG query pipeline f
 - Python service consolidation strategy (auth-service + parsing + processor + doc-service → 1-2 processes).
 - Document parsing pipeline: file → parse → segment → embed → index.
 - RAG query pipeline: query → embed → vector search → segment search → rerank → generate.
-- Integration with Milvus Lite (LLD-02) for vector operations.
-- Integration with SegmentStore (LLD-03) for keyword search.
-- Integration with algo.db (LLD-01) for task state.
+- Integration with Milvus Lite (LLD-11) for vector operations.
+- Integration with SegmentStore (LLD-12) for keyword search.
+- Integration with algo.db (LLD-10) for task state.
 - Model configuration interface (user-configurable LLM/embedding endpoints).
 - Office/OCR degradation: clear error messages when capabilities unavailable.
 - Chat SSE streaming through core proxy.
 
 **Not Included:**
-- Milvus Lite internals (see LLD-02).
-- SegmentStore internals (see LLD-03).
-- SQLite schema details (see LLD-01).
+- Milvus Lite internals (see LLD-11).
+- SegmentStore internals (see LLD-12).
+- SQLite schema details (see LLD-10).
 - Electron process manager changes (uses existing Phase 1 infrastructure).
 - Evo module (excluded per HLD).
 
@@ -104,13 +102,13 @@ Connect the real document parsing, embedding, indexing, and RAG query pipeline f
 ## 3. Dependencies
 
 **Requires:**
-- LLD-01 SQLite Complete (algo.db for task state).
-- LLD-02 Milvus Lite (VectorStore for embedding storage/retrieval).
-- LLD-03 SegmentStore Local (keyword search for hybrid retrieval).
+- LLD-10 SQLite Complete (algo.db for task state).
+- LLD-11 Milvus Lite (VectorStore for embedding storage/retrieval).
+- LLD-12 SegmentStore Local (keyword search for hybrid retrieval).
 - Phase 1: Process Manager, Local Proxy, auth-service.
 
 **Depended on by:**
-- LLD-06 Frontend Complete (API responses for status/chat/parsing).
+- LLD-15 Frontend Complete (API responses for status/chat/parsing).
 
 ---
 
@@ -124,7 +122,7 @@ auth-service      (port 8002) — standalone FastAPI
 algorithm-mock    (port 8046) — mock responses
 ```
 
-#### Phase 2 Target
+#### Complete-Feature Target
 ```
 auth-service      (port 8002) — standalone FastAPI (unchanged)
 algorithm-service (port 8046) — consolidated FastAPI:

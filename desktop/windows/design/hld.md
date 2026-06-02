@@ -416,7 +416,7 @@ Windows 是首个交付平台，也是本方案重点。macOS 不进入 Windows 
 
 ### 2.4.1 Phase 1 功能实现必须满足
 
-新版 Phase 1 不再只是早期可行性验证，而是把原前两个阶段合并为“功能实现”阶段。Phase 1 必须满足：
+Phase 1 是 Desktop 功能实现与自包含运行目录阶段，必须一次性交付完整本地功能闭环。Phase 1 必须满足：
 
 - Electron 桌面壳可运行。
 - 本地后端可由 Electron 启动和关闭。
@@ -440,9 +440,9 @@ Windows 是首个交付平台，也是本方案重点。macOS 不进入 Windows 
 - 去除 Desktop UI 中的登录、复杂 RBAC、用户角色管理和 Evo 入口；底层数据模型可保留，通过模式开关隐藏或禁用界面完成。
 - 日志、诊断、安全基线、功能、性能、稳定性验证通过。
 
-### 2.4.2 Phase 1 可以降级或后置
+### 2.4.2 Phase 1 范围外或允许显式降级的能力
 
-Phase 1 可以降级或后置：
+以下能力不属于 Phase 1 必须完成的本地功能闭环；如入口存在，必须给出清晰降级提示或通过模式开关隐藏，不能表现为半完成主链路：
 
 - 完整 Office 本地转换。
 - 本地 OCR。
@@ -1177,425 +1177,115 @@ Phase 1 输出目录为 `~/LazyMind/`，目录内 `LazyMind.exe` 双击可启动
 
 Phase 1 需要提供 Windows 原生可用的开发构建入口：
 
-- Makefile target 名称为 `desktop-dev-windows-exe`。
+- Makefile target 名称为 `windows-desktop`。
 - 构建产物输出到 `~/LazyMind/`，不写入系统根目录。
 - 每次 build 前自动终止旧 `LazyMind.exe`、Electron 和后端进程，避免文件被占用。
 - 每次 build 前清除旧 `~/LazyMind/` 目录后重新生成。
 - Makefile 命令必须兼容 Windows，使用 PowerShell 或 Windows 原生命令，禁止依赖 `sed`、`sleep`、`grep` 等 Unix-only 工具。
 - PowerShell 7 下需要确保 Node.js、`npm`、`npx`、`pnpm` 等命令可解析。
 - Vite `outDir` 位于 project root 外时，构建命令必须带 `--emptyOutDir`，避免旧前端资源残留。
-- 仓库允许保留 gitignored 的本地开发配置文件；`make desktop-dev-windows-exe` 自动复制到输出目录，避免每次重建后手动配置模型。
+- 仓库允许保留 gitignored 的本地开发配置文件；`make windows-desktop` 自动复制到输出目录，避免每次重建后手动配置模型。
 - 应用图标 `.ico` 从 `frontend/src/public/Lazy.png` 生成，存放到 `resources/icons/icon.ico` 并嵌入 exe。
 - Windows 脚本不得因 `> nul` 等重定向误生成实际 `nul` 文件，构建后需要检查输出目录。
 
 ---
 
-# 4. 分两个阶段的落地计划
-
-本章只做任务拆分和依赖识别，不做工作量预估。新版阶段划分如下：
-
-- **Phase 1：功能实现**。合并原前两个阶段，目标是在本地 build 出自包含目录 `~/LazyMind/` 和 `LazyMind.exe` 主程序，双击即可启动，并在功能层面等效大部分 Web 版。
-- **Phase 2：打安装包**。目标是在 Phase 1 功能完成基础上生成 Windows installer，完成干净环境安装、升级、卸载、签名和 CI artifact。
-
-## 4.1 Phase 1：功能实现
-
-### 4.1.1 阶段目标
-
-Phase 1 目标是在开发机和目标 Windows 环境上跑通真实 Desktop 功能闭环，并产出无需 Docker、无需开发环境的自包含运行目录。
-
-Phase 1 重点包括：
-
-- Electron 桌面壳。
-- 前端资源通过自定义协议加载。
-- 本地 Go/Python 后端启动、健康检查和关闭。
-- 本地 API 代理与当前助手身份注入。
-- 自包含输出目录 `~/LazyMind/`。
-- `~/LazyMind/LazyMind.exe` 双击启动，无控制台窗口。
-- 免登录。
-- 默认 AI 助手初始化。
-- 新建和切换 AI 助手。
-- 系统管理、技能、问答、知识库、模型配置围绕当前助手工作。
-- 登录、复杂 RBAC、用户角色管理、Evo 等不进入 Desktop 主界面。
-- SQLite 关系库完整可用。
-- Milvus Lite 作为默认向量存储完整接入。
-- SegmentStore 本地实现完整接入。
-- 文档扫描、解析、索引、问答形成真实流程。
-- 模型配置复用 `/model-providers` 页面。
-- 日志、诊断、安全基线、功能、性能、稳定性验证通过。
-
-### 4.1.2 Phase 1 任务拆分
-
-#### A. Desktop 工程骨架
-
-- 新增 Desktop 工程入口。
-- 注册 Desktop Renderer 自定义协议。
-- 通过自定义协议加载前端构建产物。
-- 初始化本地数据目录。
-- 管理本地配置。
-- 建立本地日志目录。
-- 移除默认菜单栏。
-- 注册并处理 `lazymind:` 自定义协议，避免应用内链接触发 unsupported protocol。
-
-依赖：
-
-- 前端可构建为静态资源。
-- Electron 自定义协议能正确加载静态资源、处理前端路由 fallback 和 MIME type。
-- Electron 工程与现有 monorepo 构建不冲突。
-
-#### B. Windows 自包含开发构建
-
-- 提供 `make desktop-dev-windows-exe` target。
-- build 前自动终止旧进程。
-- build 前清除旧 `~/LazyMind/`。
-- 构建前端、Electron Main/Preload、Go 后端、Python 后端或 Python 可执行目录。
-- 复制必要资源、默认文档、模板配置、gitignored 本地开发配置到输出目录。
-- 生成或复制 `LazyMind.exe` GUI 子系统启动器。
-- 从 `frontend/src/public/Lazy.png` 生成并嵌入 `resources/icons/icon.ico`。
-- Vite 输出到 repo root 外时使用 `--emptyOutDir`。
-- Windows 脚本使用 PowerShell 或原生命令，不依赖 Unix-only 工具。
-- 兼容 PowerShell 7 下 PATH 变化，确保 `npm`、`npx`、`pnpm` 可用。
-- 构建后检查不会产生实际 `nul` artifact。
-
-依赖：
-
-- Desktop 工程骨架稳定。
-- 前端 Desktop build script 稳定。
-- Go / Python 后端具备 Windows 可执行产物或可执行目录构建方式。
-
-#### C. 本地进程管理
-
-- Electron 启动 Go core。
-- Electron 启动 auth-service。
-- Electron 启动必要 Python 算法、解析、处理和文档服务。
-- Electron 启动 scan-control-plane、file-watcher。
-- 统一健康检查。
-- 关闭应用时清理子进程。
-- 子进程不弹出控制台窗口。
-- 后端进程路径只从受控输出目录或资源目录解析。
-
-依赖：
-
-- 各服务具备 Desktop Mode 启动参数。
-- 各服务能输出健康状态。
-- 各服务日志可重定向。
-
-#### D. Local Proxy
-
-- 建立本地 API 统一入口。
-- 转发现有 API。
-- 支持 REST、SSE、上传、下载。
-- 注入当前助手身份。
-- 覆盖前端传入的 `X-User-ID` / `X-User-Id`，避免 Renderer 伪造身份。
-- 注入 `X-Desktop-Secret` 或等价本地 secret。
-- 对后端未启动或异常退出返回可理解错误。
+# 4. 两阶段整体落地计划
 
-依赖：
+本章定义新版 Desktop 工作的两个阶段。这里的“两阶段”是交付形态分界，不是功能分批交付：
 
-- 后端服务端口可配置。
-- 前端请求可切到相对路径或本地代理路径。
+- **Phase 1：功能实现与自包含运行目录**。一次性交付完整 Desktop 功能闭环，并生成可人工验证的 `~/LazyMind/LazyMind.exe` 自包含运行目录。Phase 1 结束时，应用应无需 Docker、无需手工启动后端，能够完成助手、扫描、解析、索引、检索、Chat/RAG、模型配置、日志诊断和安全基线验证。
+- **Phase 2：安装包产品化**。不重新实现功能，只把 Phase 1 已完成的自包含能力封装为 Windows installer，并验证安装、升级、卸载、签名、干净环境和 CI artifact。
 
-#### E. 免登录、系统管理与默认助手
+## 4.1 Phase 1：功能实现与自包含运行目录
 
-- 首次启动创建默认组、默认权限、默认 AI 助手。
-- Desktop Mode 前端跳过登录页。
-- 设置页面去掉“前往登录”入口。
-- 当前助手状态可读取、可切换。
-- 新建 AI 助手时后台创建用户并绑定默认组和写权限。
-- “系统管理”在 Desktop Mode 下直接进入 AI 助手管理，不暴露登录态前置条件。
-- 前台将“用户”重命名为“AI 助手”，“新建用户”显示为“新建 AI 助手”。
-- 技能页面和问答页面可切换不同 AI 助手。
+### 4.1.1 交付目标
 
-依赖：
+Phase 1 的目标是一步到位交付完整可用的 Windows Desktop 开发包。阶段完成时必须满足：
 
-- auth-service 能提供 Desktop 初始化能力。
-- 前端 auth facade 支持 Desktop Mode。
-- core 接受当前用户上下文。
+- `make windows-desktop` 生成 `~/LazyMind/`，目录内 `LazyMind.exe` 可双击启动且不弹出控制台窗口。
+- Electron 主进程负责窗口、协议、进程管理、Local Proxy、日志采集、数据目录和 native 能力边界。
+- 前端进入 Desktop Mode 后免登录，隐藏登录、复杂 RBAC、用户角色管理和 Evo 入口，以 AI 助手作为前台身份模型。
+- auth-service、core、scan-control-plane、file-watcher、algorithm/parsing/processor/doc/chat 等本地服务由 Electron 启动、健康检查、记录日志并在关闭时清理。
+- 当前助手身份由受控层注入到后端，不能依赖 Renderer 可伪造 header。
+- SQLite 覆盖 Phase 1 所需全部关系数据；Runtime Store 的易失/持久边界清晰；Cloud 默认 PostgreSQL/Redis 路径不变。
+- Milvus Lite、SegmentStore 本地实现、文档扫描、解析、分段、embedding、索引、检索和 Chat/RAG 进入真实链路。
+- 模型配置复用 `/model-providers`，支持 inner 预置和 dynamic GUI 配置；mock 或缺失能力必须在 UI 中明确提示并给出配置入口。
+- 日志、诊断包、Credential/secret 脱敏、IPC 白名单、Local Proxy 本地认证、子进程路径安全和文件访问边界在 Phase 1 内建立。
+- 默认样例文档、50 个以上 AI 助手隔离、重启持久化、关闭清理、Cloud 回归、性能和稳定性验证通过。
 
-#### F. SQLite 完整改造
+### 4.1.2 开发工作流
 
-- 完成 core migration SQLite 兼容。
-- 完成 auth-service SQLite 兼容。
-- 完成 scan-control-plane SQLite 兼容。
-- 完成算法管理表或文档任务表 SQLite 兼容。
-- 处理 PostgreSQL 专属语法。
-- 处理 SQLite WAL、busy timeout、foreign key。
-- 处理多进程写入边界。
+Phase 1 允许并行开发，但每条线都以最终完整能力为目标，不设置“只跑骨架”的中间验收。建议按依赖分组推进：
 
-依赖：
+#### A. Desktop Shell、构建入口和安全底座
 
-- 识别 PostgreSQL 专属 SQL。
-- 已确定 ORM 化或 migration 分支策略。
-- 已确定 DB ownership。
+- 建立 Electron Desktop 工程、主窗口、自定义协议、无菜单栏、`lazymind:` 协议处理和数据目录初始化。
+- 实现 `make windows-desktop`，自动清理旧进程和旧输出目录，构建前端、Electron、Go/Python 后端、资源、图标和配置模板。
+- 构建脚本使用 PowerShell / Windows 原生命令，兼容 PowerShell 7，避免 Unix-only 命令和 `nul` artifact。
+- 同步建立 BrowserWindow 安全默认值、Preload/IPC allowlist、路径参数校验、日志目录和诊断包脱敏规则。
 
-#### G. Milvus Lite 完整接入
+#### B. 本地服务运行时
 
-- 验证 Windows 环境安装 Milvus Lite。
-- 验证 Milvus Lite 数据目录可放在用户数据目录。
-- 支持 collection 生命周期。
-- 支持向量写入、删除、更新、查询。
-- 支持索引重建。
-- 支持数据目录迁移和清理。
-- 支持故障恢复或重建提示。
-- 记录打包、依赖、性能、稳定性问题。
+- Electron Process Manager 统一启动、健康检查、日志采集、异常处理和关闭 core、auth-service、algorithm/chat/parsing/processor/doc、scan-control-plane、file-watcher。
+- Local Proxy 提供本地 API 入口，支持 REST、SSE、上传、下载、后端错误转译、当前助手身份注入和 `X-Desktop-Secret` 等本地请求认证。
+- 子进程路径只来自受控输出目录或资源目录，启动命令不使用 shell 拼接。
 
-依赖：
+#### C. 本地数据和状态层
 
-- Python 环境和依赖管理可控。
-- 算法模块调用链已能配置 Desktop 向量后端。
+- 完成 core、auth-service、scan-control-plane、algorithm 相关 SQLite schema、migration、PostgreSQL 语法替换、WAL、busy timeout、foreign key 和 DB ownership。
+- Runtime Store 替换 Redis 语义，区分易失状态和必须恢复的状态；需要持久化的状态写入 SQLite 或等价本地存储。
+- 保持 Desktop Mode 与 Cloud/Server Mode 显式分支，默认 Cloud 路径不受影响。
 
-#### H. SegmentStore 本地实现
+#### D. 身份、助手和模型配置
 
-- 复用现有 SegmentStore 体系。
-- 增加 Desktop 本地实现。
-- 识别当前 OpenSearch 直接调用点。
-- 收敛直接访问 OpenSearch 的代码路径。
-- 支持关键词检索、片段 metadata、top-k 和必要过滤条件。
-- 建立与 Cloud OpenSearch 路线的行为对照测试。
+- 首次启动初始化默认组、默认权限、默认 AI 助手和默认样例文档。
+- Desktop Auth Provider 支持免登录、当前助手读取/切换、AI 助手 CRUD，并把后台用户模型封装为前台 AI 助手概念。
+- 前端 auth facade、Assistant Switcher、Chat、技能、知识库、偏好和系统管理入口全部围绕当前助手工作。
+- 模型配置复用 `/model-providers`；inner/dynamic 两种配置路径均可用于 Desktop。
+- 模型 API key 和本地 secret 通过 Credential 边界管理，不进入日志和诊断包。
 
-依赖：
+#### E. 文档、检索和问答真实链路
 
-- 梳理现有 SegmentStore 接口和实现位置。
-- 明确 Chat/RAG 所需检索接口。
+- 扫描路径由用户显式选择，不默认全盘扫描；权限失败、系统目录、隐藏目录和网络盘给出可理解提示。
+- 解析、分段、embedding、向量写入、片段索引、混合检索、Chat/RAG 和状态回传形成真实闭环。
+- Milvus Lite 使用用户数据目录，支持 collection 生命周期、写入、删除、查询、重启恢复、重建和错误恢复提示。
+- SegmentStore 本地实现复用现有接口，收敛直接 OpenSearch 调用，并与 Cloud OpenSearch 行为做对照测试。
+- Office/OCR/MinerU/PaddleOCR 可采用线上 API、mock server 或明确降级提示，但不得让主链路静默失败。
 
-#### I. 算法与解析真实链路
+#### F. 前端完整体验和验收
 
-- parsing 接收本地文件并生成真实文档结构。
-- processor 处理解析任务和状态。
-- doc-service 读取本地文档与任务数据。
-- chat service 使用 Desktop 向量和片段检索结果。
-- Office/OCR/MinerU/PaddleOCR 按线上 API、mock server 或降级方式接入。
-- 评估 Python 服务拓扑，优先把适合共享生命周期的服务合并为 1-2 个 FastAPI 进程；chat service 可因长时间流式推理和模型依赖保持独立。
-- 合并服务必须服从 SQLite ownership 和日志边界，不能为了减少进程数重新引入共享写库或难以诊断的混合日志。
-- Evo 不作为主链路；Desktop UI 和主进程配置中不暴露 Evo 入口。
+- Desktop UI 隐藏登录、注册、用户角色管理、复杂 RBAC、Evo 和 server-only 入口。
+- AI 助手管理、扫描路径管理、解析/索引状态、模型配置、服务状态、错误分类和 mock 模型提示可用。
+- 导出诊断包、打开日志目录、选择目录等 native 能力走受控 IPC。
+- 通过自包含目录 smoke、默认文档闭环、50 助手隔离、重启恢复、关闭清理、性能预算、安全 smoke 和 Cloud 回归。
 
-依赖：
+### 4.1.3 依赖顺序
 
-- SQLite、Milvus Lite、SegmentStore 本地实现可用。
-- LazyLLM 相关依赖支持 Desktop 运行形态。
+1. Desktop Shell、数据目录、日志目录和安全默认值。
+2. `make windows-desktop` 自包含输出和 launcher。
+3. Process Manager 与 Local Proxy。
+4. SQLite 完整数据层和 Runtime Store。
+5. Desktop Auth、默认助手和当前助手身份链路。
+6. Milvus Lite、SegmentStore 和算法/解析/Chat/RAG 真实链路。
+7. 前端完整体验、模型配置和 Credential 边界。
+8. 诊断包、安全 smoke、功能/性能/稳定性/Cloud 回归验收。
 
-#### J. 扫盘复用与路径权限
+## 4.2 Phase 2：安装包产品化
 
-- 前端提供添加扫描路径入口或复用现有入口。
-- Electron 提供选择目录能力。
-- 后端复用现有扫盘逻辑。
-- 扫描状态能在 UI 中展示。
-- 权限失败、系统目录、隐藏目录、网络盘等情况有可理解提示。
+### 4.2.1 交付目标
 
-依赖：
+Phase 2 只处理分发形态，不扩大 Desktop 功能范围。它以 Phase 1 自包含目录和完整功能验收为输入，输出可安装、可升级、可卸载、可追溯的 Windows installer。
 
-- 现有扫盘逻辑可在本地路径下运行。
-- 文件权限失败有基本错误处理。
-
-#### K. 前端完整体验
-
-- AI 助手管理完整可用。
-- Assistant Switcher 在 Chat、技能、知识库、偏好、词汇等页面统一生效。
-- 文档扫描路径管理可用。
-- 文档解析和索引状态可见。
-- 模型配置复用 `/model-providers` 页面，支持包括 SiliconFlow 在内的已有 provider。
-- 本地服务错误、索引错误、模型错误可区分展示。
-- 当 mock 模型配置生效时显示 MockModelWarning，并链接到 `/model-providers`。
-- 隐藏登录、注册、用户角色管理、复杂 RBAC、Evo 等 Desktop 明确去除的入口。
+### 4.2.2 安装包工作流
 
-依赖：
-
-- 后端提供稳定状态接口。
-- Electron 提供 native 能力接口。
-
-#### L. Credential 与本地配置
-
-- 最终模型配置架构复用已有 inner/dynamic 机制。
-- 废弃 Desktop 专属本地模型配置文件作为产品方案。
-- inner 模式通过启动前配置文件预置模型。
-- dynamic 模式通过 GUI `/model-providers` 页面手动配置。
-- gitignored 本地开发配置只用于开发构建复制，不成为产品唯一配置路径。
-- 模型 API key 不进入日志和诊断包。
-- OS Credential Manager / DPAPI 可在 Phase 1 完成；如实现风险过高，必须至少保留清晰接口和 Phase 2 安装包验收项。
-
-依赖：
-
-- 模型配置页面可复用。
-- Electron IPC 或后端 credential bridge 边界明确。
-
-#### M. 日志与诊断
-
-- Electron 采集子进程日志。
-- 按模块写日志文件。
-- 前端提供打开日志目录或导出诊断包入口。
-- 诊断包包含服务状态和最近日志。
-
-依赖：
-
-- 各服务 stdout/stderr 或 log 文件路径可控。
-- 敏感信息脱敏规则明确。
-
-#### N. 运行环境迁移安全基线
-
-- 建立 Electron BrowserWindow 安全默认配置。
-- 建立 Preload / IPC 白名单。
-- Local Proxy 和本地后端只监听 localhost。
-- Local Proxy 与本地后端之间建立本地请求认证机制或等价防伪造机制。
-- 当前助手身份由受控层注入，避免普通前端代码随意伪造。
-- 选择目录、打开日志、导出诊断包等 native 能力需要参数校验和范围限制。
-- 子进程启动不使用 shell 拼接命令。
-- 日志和诊断包脱敏。
-- 自包含开发目录阶段即验证基本安全基线，不等到安装包阶段再补。
-- `.gitattributes` 明确换行规范：服务端代码 LF，Windows `.bat` / `.ps1` / Windows C 源码 CRLF，前端代码 LF，设计文档 LF。
-
-依赖：
-
-- Electron 工程骨架已建立。
-- Local Proxy 和 Process Manager 的职责边界已确定。
-- 日志目录、数据目录和诊断包范围已确定。
-
-#### O. 启动、资源与功能验收
-
-- 记录 Electron、core、auth-service、chat service、Milvus Lite、scan-control-plane 的启动耗时。
-- 记录各后端进程启动后的内存占用。
-- 验证首屏可见、核心可操作、完整能力就绪三个启动层级。
-- 验证创建 50 个以上 AI 助手后的创建、切换和隔离行为。
-- 验证默认约 100KB 太阳系 Markdown 样例文档进入扫描、解析、索引、问答流程。
-- 验证关闭应用后无子进程残留。
-- 验证重启应用后数据和上次选择的助手恢复。
-- 验证 Python 服务未就绪时，Chat、解析、扫盘等入口能展示明确状态，而不是空白或无响应。
-
-依赖：
-
-- Process Manager 已能采集健康检查和进程信息。
-- 前端已有基础服务状态展示。
-
-### 4.1.3 Phase 1 依赖顺序
-
-建议依赖顺序：
-
-1. Desktop 工程骨架。
-2. Windows 自包含开发构建入口。
-3. 本地数据目录与日志目录。
-4. 本地进程管理。
-5. Local Proxy。
-6. 运行环境迁移安全基线。
-7. SQLite 完整改造。
-8. Runtime Store 语义替换与关键状态持久化。
-9. 免登录、默认助手和系统管理改造。
-10. 前端 Desktop Mode、Assistant Switcher 和页面隐藏。
-11. Milvus Lite 完整接入。
-12. SegmentStore 本地实现。
-13. 算法与解析真实链路。
-14. 扫盘复用与路径权限。
-15. 模型配置复用和 credential 边界。
-16. 启动、资源、功能、稳定性验证。
-17. 诊断包与自包含目录修正。
-
-## 4.2 Phase 2：打安装包
-
-### 4.2.1 阶段目标
-
-Phase 2 目标是在 Phase 1 功能完整可运行和自包含目录可验证的基础上完成产品化分发。
-
-重点包括：
-
-- Windows 安装包。
-- 无开发环境运行。
-- 后端可执行文件随包分发。
-- Python 依赖和 Milvus Lite 可随包运行。
-- 用户数据目录与安装目录分离。
-- 升级、卸载、诊断能力可用。
-- Cloud artifact 不受 Desktop 发布链路影响。
-- GitHub CI 可以生成可追溯的 Windows installer artifact，并为后续正式发布打基础。
-
-### 4.2.2 安装包任务拆分
-
-#### A. 前端与 Electron 打包
-
-- 构建 Desktop Renderer。
-- 打包 Electron Main/Preload。
-- 配置应用图标、名称、版本号。
-- 生成 Windows installer。
-
-依赖：
-
-- Desktop 工程骨架稳定。
-- 前端 Desktop Mode 构建稳定。
-
-#### B. Go 后端打包
-
-- 编译 Windows exe。
-- 放入安装包资源目录。
-- Electron 启动时定位 exe。
-- 处理 stdout/stderr 和退出码。
-
-依赖：
-
-- Go 服务 Desktop Mode 配置稳定。
-- 独立 exe 运行通过。
-
-#### C. Python 后端打包
-
-- 选择 PyInstaller、Nuitka 或其他打包方式。
-- 打包 auth-service、algorithm/chat、parsing、processor、doc-service 等。
-- 打包 LazyLLM 相关依赖。
-- 打包 Milvus Lite 运行依赖。
-- 验证资源文件定位、动态 import、模型配置、证书等。
-
-依赖：
-
-- Phase 1 Python 依赖已验证。
-- Milvus Lite Phase 1 验证可接受。
-
-#### D. 用户数据与升级
-
-- 首次启动复制默认配置到用户数据目录。
-- 升级时保留用户数据。
-- 升级时执行必要 migration。
-- 卸载时默认保留用户数据，可提供清理选项。
-
-依赖：
-
-- 本地数据目录结构稳定。
-- migration 策略稳定。
-
-#### E. 诊断与崩溃处理
-
-- 安装包环境下日志路径正确。
-- 崩溃文件可收集。
-- 诊断包可导出。
-- 后端异常退出可展示给用户。
-
-依赖：
-
-- Phase 1 日志体系已建立。
-
-#### F. 干净环境验证
-
-- 干净 Windows 环境安装。
-- 无 Docker 环境运行。
-- 无 Python/Go/Node 环境运行。
-- 普通用户权限运行。
-- 中文路径、空格路径运行。
-- Windows Defender / 签名相关验证。
-- 升级安装验证。
-- 卸载验证。
-
-依赖：
-
-- 安装包生成稳定。
-- 后端资源定位稳定。
-
-#### G. GitHub CI 打包发布
-
-- 使用 GitHub Actions 建立 Windows Desktop installer 构建 workflow。
-- workflow 负责构建前端、打包 Electron Main/Preload、编译 Go exe、打包 Python 后端、组装 installer。
-- release tag 或手工 dispatch 可触发产物上传，PR 阶段可只产出临时 artifact。
-- CI 产物需要附带版本号、commit SHA、构建日志和校验和。
-- 签名证书、发布 token、自动更新密钥通过 GitHub Actions Secrets 管理；正式签名和自动更新策略留到后续 LLD 细化。
-
-依赖：
-
-- 安装包本地构建命令稳定。
-- Windows runner 能缓存 npm、Go、Python / uv 依赖并保持可复现。
-- GitHub CI 不影响 Cloud/Server Mode 的现有构建 workflow。
-
----
+- 使用 electron-builder 或等价方案生成 Windows installer，配置应用名称、图标、版本、安装目录和 artifact 命名。
+- 打包 Go exe、Python 可执行目录、Milvus Lite 依赖、前端资源、默认模板和运行时资源，并验证安装包环境中的资源定位。
+- 分离安装目录和用户数据目录，升级保留用户数据，migration 失败时提供日志、备份和恢复提示。
+- 卸载默认保留用户数据，并可提供可选清理路径。
+- 安装包环境下继续验证日志、诊断包、崩溃收集、后端异常提示和子进程清理。
+- 验证干净 Windows、无 Docker/Node/Go/Python、普通用户权限、中文路径、空格路径、Defender/误报、升级和卸载。
+- 建立 GitHub Actions Windows workflow，生成 installer、SHA256、commit SHA、版本元数据和构建日志；签名证书和发布 token 只通过 Secrets 注入。
 
 # 5. 每个阶段的方案设计
 
@@ -1723,7 +1413,7 @@ Phase 1 暂不设计其他向量方案。如果验证不理想，再根据实测
 
 #### Windows 自包含目录
 
-- `make desktop-dev-windows-exe` 生成 `~/LazyMind/`。
+- `make windows-desktop` 生成 `~/LazyMind/`。
 - `~/LazyMind/LazyMind.exe` 是唯一人工验证入口。
 - 构建前自动 clean，并清理旧进程。
 - 构建脚本使用 Windows 原生命令或 PowerShell。
@@ -1748,18 +1438,18 @@ Phase 1 必须建立以下安全基线：
 - 选择目录、打开日志、导出诊断包等能力不接受任意未校验路径。
 - 子进程启动不使用 shell 拼接命令。
 - 日志和诊断包默认脱敏，尤其必须脱敏模型 key。
-- Phase 1 阶段密钥如暂时明文写在开发配置文件中，也不得进入日志和诊断包；Credential Manager / DPAPI 优先在 Phase 1 完成，如未完成必须在 Phase 2 安装包验收中保留明确项。
+- Phase 1 必须完成明确的 Credential 边界：模型 key 可来自开发期 gitignored 配置或 GUI 配置，但不得进入日志和诊断包；Windows Credential Manager / DPAPI 或受控 fallback 的取舍在 Phase 1 LLD 中定稿，Phase 2 只验证安装包环境中的行为。
 
 ### 5.1.3 Phase 1 验收口径
 
-Phase 1 可接受：
+Phase 1 明确允许的范围裁剪：
 
 - 模型配置默认是 mock server / mock backend。
 - Chat 中提示用户当前处于 mock 状态，并引导用户到模型配置界面配置真实模型。
 - Office/OCR 能力缺失、走 mock server、线上 API 或明确降级提示。
 - Evo 缺失。
 - 自包含开发目录不签名。
-- 密钥明文写在开发配置文件中，但日志和诊断包必须脱敏。
+- gitignored 开发配置可以作为构建输入或本地调试来源；产品密钥存储与注入必须遵循 `16-credential-security.md`。
 
 Phase 1 不可接受：
 
@@ -1996,7 +1686,7 @@ Phase 2 需要建立 GitHub Actions 作为标准打包入口，但本 HLD 不展
 
 缓解：
 
-- Phase 1 先解除启动阻塞，再完成完整 migration 策略。
+- 实现可以按依赖先打通连接和启动，但 Phase 1 验收必须包含完整 migration 策略和真实业务表覆盖。
 - 双模式测试 PostgreSQL 和 SQLite。
 
 ## 7.3 Runtime Store 语义缺失风险
@@ -2010,7 +1700,7 @@ Phase 2 需要建立 GitHub Actions 作为标准打包入口，但本 HLD 不展
 
 - 抽象 Runtime Store。
 - 对每个语义单独列测试。
-- Desktop Phase 1 可以先用内存实现解除 Redis 启动阻塞，但不能把语义删除；需要重启恢复的状态必须持久化。
+- 开发过程中可用内存实现验证接口形状，但 Phase 1 验收必须包含完整 Runtime Store 语义测试；需要重启恢复的状态必须持久化。
 
 ## 7.4 身份串号风险
 
@@ -2129,8 +1819,8 @@ Phase 2 需要建立 GitHub Actions 作为标准打包入口，但本 HLD 不展
 缓解：
 
 - 日志和诊断包统一脱敏。
-- Phase 1 阶段如暂时允许密钥明文写在开发配置文件中，必须确保不进入日志和诊断包。
-- Windows Credential Manager / DPAPI 等 OS 级安全存储方案优先在 Phase 1 接入；如未完成，进入 Phase 2 安装包验收项。
+- gitignored 开发配置可用于本地调试，但模型 key 和本地 secret 的产品路径必须遵循 Phase 1 Credential 边界，并确保不进入日志和诊断包。
+- Windows Credential Manager / DPAPI 或受控 fallback 必须在 Phase 1 定稿并验证；Phase 2 只复验安装包环境中的资源定位和权限行为。
 - 诊断包只包含配置摘要、服务状态、版本号、最近日志和崩溃信息。
 - 诊断包必须脱敏模型 key。
 - 用户文档正文默认不进入诊断包。

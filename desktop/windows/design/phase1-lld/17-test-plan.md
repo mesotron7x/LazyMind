@@ -1,12 +1,10 @@
-# LLD-08: Integration Test & Performance Plan
-
-> Stage note: this detailed feature LLD was written for the old Phase 2 Complete Features stage. In the new two-phase plan, this work belongs to Phase 1 功能实现. New Phase 2 is packaging only.
+# LLD-17: Integration Test & Performance Plan
 
 ## 1. Module Overview
 
 ### 1.1 Goal
 
-Define the comprehensive testing strategy for Phase 2 Desktop Mode. Cover integration tests that validate cross-module behavior, performance benchmarks against HLD targets, and the 50-assistant isolation verification. Ensure all Phase 2 acceptance criteria are testable and tested.
+Define the comprehensive testing strategy for Phase 1 Desktop functional delivery. Cover integration tests that validate cross-module behavior, performance benchmarks against HLD targets, and the 50-assistant isolation verification. Ensure all Phase 1 acceptance criteria are testable and tested.
 
 ### 1.2 Scope
 
@@ -537,13 +535,13 @@ Each test suite:
 
 | Module | Unit | Integration | E2E | Performance |
 |--------|------|-------------|-----|-------------|
-| LLD-01 SQLite | ✅ | ✅ | — | — |
-| LLD-02 Milvus Lite | ✅ | ✅ | — | ✅ |
-| LLD-03 SegmentStore | ✅ | ✅ | — | ✅ |
-| LLD-04 Algorithm Pipeline | ✅ | ✅ | ✅ | ✅ |
-| LLD-05 Runtime Store | ✅ | ✅ | — | — |
-| LLD-06 Frontend | ✅ (Vitest) | — | ✅ | — |
-| LLD-07 Credentials | ✅ | ✅ | ✅ | — |
+| LLD-10 SQLite | ✅ | ✅ | — | — |
+| LLD-11 Milvus Lite | ✅ | ✅ | — | ✅ |
+| LLD-12 SegmentStore | ✅ | ✅ | — | ✅ |
+| LLD-13 Algorithm Pipeline | ✅ | ✅ | ✅ | ✅ |
+| LLD-14 Runtime Store | ✅ | ✅ | — | — |
+| LLD-15 Frontend | ✅ (Vitest) | — | ✅ | — |
+| LLD-16 Credentials | ✅ | ✅ | ✅ | — |
 
 ### 6.2 Cross-Cutting Concerns
 
@@ -562,7 +560,7 @@ Each test suite:
 
 ## 7. Acceptance Test Mapping
 
-Each Phase 2 acceptance criterion mapped to a specific test:
+Each Phase 1 acceptance criterion mapped to a specific test:
 
 | Criterion | Test File | Test Name |
 |-----------|-----------|-----------|

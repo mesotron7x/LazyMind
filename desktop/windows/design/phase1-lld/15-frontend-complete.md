@@ -1,12 +1,10 @@
-# LLD-06: Frontend Complete Experience
-
-> Stage note: this detailed feature LLD was written for the old Phase 2 Complete Features stage. In the new two-phase plan, this work belongs to Phase 1 功能实现. New Phase 2 is packaging only.
+# LLD-15: Frontend Complete Experience
 
 ## 1. Module Overview
 
 ### 1.1 Goal
 
-Complete the Desktop Mode frontend experience. Phase 1 delivered the skeleton (AssistantSwitcher, mock warning, service status bar, desktop store). Phase 2 delivers full AI assistant management UI, document scanning path management, parsing/indexing status visualization, model configuration interface, and complete data isolation per assistant.
+Complete the Desktop Mode frontend experience in one Phase 1 delivery, including full AI assistant management UI, document scanning path management, parsing/indexing status visualization, model configuration interface, and complete data isolation per assistant.
 
 ### 1.2 Scope
 
@@ -23,7 +21,7 @@ Complete the Desktop Mode frontend experience. Phase 1 delivered the skeleton (A
 - Desktop-specific pages hidden in Cloud mode.
 
 **Not Included:**
-- Backend API implementation (see LLD-04).
+- Backend API implementation (see LLD-13).
 - Electron IPC changes (Phase 1 sufficient).
 - Milvus Lite or SegmentStore internals.
 
@@ -88,11 +86,11 @@ MainLayout
 
 **Requires:**
 - Phase 1: Desktop store, AssistantSwitcher, platform utils.
-- LLD-04: Backend APIs for parsing status, chat with RAG, model config.
+- LLD-13: Backend APIs for parsing status, chat with RAG, model config.
 - Phase 1: Local Proxy routes for API access.
 
 **Depended on by:**
-- LLD-08 Test Plan (E2E testing).
+- LLD-17 Test Plan (E2E testing).
 
 ---
 

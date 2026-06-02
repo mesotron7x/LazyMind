@@ -110,7 +110,7 @@ class RateLimiter(Protocol):
 
 ### 3.1 本模块依赖
 
-- **LLD-05**：如果某些状态需要持久化到 SQLite（MVP 阶段暂时全内存）。
+- **LLD-05**：如果某些状态需要持久化到 SQLite（Phase 1 基础设计可先使用内存实现，最终交付以 `14-runtime-store-hardening.md` 的持久化边界为准）。
 
 ### 3.2 被依赖
 

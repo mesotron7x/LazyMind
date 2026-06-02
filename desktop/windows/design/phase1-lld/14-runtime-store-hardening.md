@@ -1,6 +1,4 @@
-# LLD-05: Runtime Store Hardening
-
-> Stage note: this detailed feature LLD was written for the old Phase 2 Complete Features stage. In the new two-phase plan, this work belongs to Phase 1 功能实现. New Phase 2 is packaging only.
+# LLD-14: Runtime Store Hardening
 
 ## 1. Module Overview
 
@@ -22,7 +20,7 @@ Harden the Phase 1 in-memory RuntimeStore by persisting critical state to SQLite
 **Not Included:**
 - Redis behavior changes (Cloud mode unchanged).
 - Token store for auth-service (Desktop is token-free by design).
-- Milvus Lite persistence (handled by LLD-02).
+- Milvus Lite persistence (handled by LLD-11).
 
 ---
 
@@ -77,10 +75,10 @@ type RuntimeStore interface {
 
 **Requires:**
 - Phase 1: `MemoryRuntimeStore` and `RuntimeStore` interface.
-- LLD-01: `main.db` available with WAL mode.
+- LLD-10: `main.db` available with WAL mode.
 
 **Depended on by:**
-- LLD-04 Algorithm Pipeline (chat state persistence).
+- LLD-13 Algorithm Pipeline (chat state persistence).
 
 ---
 
@@ -247,7 +245,7 @@ func NewRuntimeStore(redisClient *redis.Client) RuntimeStore {
 }
 ```
 
-Phase 2 Desktop default: `LAZYMIND_STATE_BACKEND=hybrid`.
+Phase 1 Desktop default: `LAZYMIND_STATE_BACKEND=hybrid`.
 
 ---
 
@@ -267,9 +265,9 @@ Phase 2 Desktop default: `LAZYMIND_STATE_BACKEND=hybrid`.
 
 ## 6. Configuration & Environment Variables
 
-| Variable | Service | Phase 1 Value | Phase 2 Value |
-|----------|---------|---------------|---------------|
-| `LAZYMIND_STATE_BACKEND` | core | `memory` | `hybrid` |
+| Variable | Service | Phase 1 initial value | Phase 1 required final value |
+|----------|---------|-----------------------|------------------------------|
+| `LAZYMIND_STATE_BACKEND` | core | `memory` during isolated unit tests | `hybrid` for Desktop runtime |
 
 ---
 

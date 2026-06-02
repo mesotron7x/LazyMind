@@ -1,39 +1,39 @@
 # Phase 2 打安装包 — Low-Level Design 总览
 
-## 1. 背景
+## 1. 阶段定位
 
-新版 Phase 2 对应 HLD 中的“打安装包”阶段。原 Phase 2 Complete Features 的功能实现内容已经并入新版 Phase 1；本目录下既有 `01-sqlite-complete.md`、`02-milvus-lite.md`、`03-segment-store-local.md`、`04-algorithm-pipeline.md`、`05-runtime-store-hardening.md`、`06-frontend-complete.md`、`07-credential-security.md`、`08-test-plan.md` 作为新版 Phase 1 的参考资料保留。
+Phase 2 是安装包产品化阶段。它不重新实现 Desktop 功能，也不承接 Phase 1 未完成的功能补全；它的输入是 Phase 1 已通过验收的 `~/LazyMind/` 自包含运行目录和完整 Desktop 功能闭环，输出是可安装、可升级、可卸载、可追溯的 Windows installer。
 
-后续新增或重写 Phase 2 LLD 时，应聚焦 Windows installer、升级、卸载、签名、自动更新、干净环境验证和 GitHub CI artifact，不再把真实功能闭环放到 Phase 2。
+Phase 2 的设计重点是分发形态、资源定位、安装目录与用户数据目录分离、升级和卸载、签名与完整性、干净 Windows 环境验证、GitHub Actions artifact。
 
 ---
 
 ## 2. Phase 2 目标
 
-1. 基于 Phase 1 已验证的 `~/LazyMind/` 自包含目录，生成 Windows installer。
+1. 基于 Phase 1 已验证的 `~/LazyMind/LazyMind.exe` 和完整功能闭环生成 Windows installer。
 2. 安装后无需 Docker、Node、Go、Python 等开发环境。
-3. 安装目录与用户数据目录分离。
-4. Go 后端 exe、Python 可执行目录、Milvus Lite 依赖、Electron 资源均随包分发。
-5. 升级保留用户数据并执行必要 migration。
-6. 卸载默认保留用户数据，并可提供清理选项。
-7. 支持普通用户权限、中文路径、空格路径。
-8. 诊断包、日志、崩溃收集在安装包环境可用。
+3. 安装目录只包含应用程序和只读资源，用户数据目录保存配置、数据库、向量数据、片段索引、上传文件、日志、缓存和备份。
+4. Go 后端 exe、Python 可执行目录、Milvus Lite 依赖、Electron 资源均随包分发并能通过安装包资源路径定位。
+5. 升级保留用户数据并执行必要 migration；失败时保留日志、备份和恢复提示。
+6. 卸载默认保留用户数据，并可提供显式清理选项。
+7. 支持普通用户权限、中文路径、空格路径和干净 Windows x64 环境。
+8. 诊断包、日志、崩溃收集和后端异常提示在安装包环境可用。
 9. GitHub CI 能生成可追溯 artifact，附带 commit SHA、版本号、构建日志和 SHA256。
 10. 签名证书、发布 token、自动更新密钥只通过安全 secret 注入，不写入仓库或日志。
 
 ---
 
-## 3. 模块拆分建议
+## 3. 模块拆分
 
 | # | 模块 | 范围 |
 |---|------|------|
-| 01 | Electron Installer | electron-builder 配置、应用名称、图标、版本、installer 类型 |
-| 02 | Backend Packaging | Go exe、Python 可执行目录、Milvus Lite 依赖、资源定位 |
-| 03 | Data Directory & Migration | 安装目录 / 用户数据目录分离，升级 migration，备份和恢复提示 |
-| 04 | Security & Signing | Windows 签名、完整性校验、自动更新安全、供应链扫描 |
-| 05 | Clean Windows Verification | 无开发环境、普通用户权限、中文/空格路径、Defender/误报验证 |
-| 06 | CI Artifact Workflow | GitHub Actions Windows workflow、缓存、artifact、校验和、日志 |
-| 07 | Install/Upgrade/Uninstall Test Plan | 安装、首次启动、升级、卸载、数据保留、诊断包验收 |
+| 01 | Electron Installer | electron-builder 配置、应用名称、图标、版本、installer 类型、artifact 命名 |
+| 02 | Backend Packaging | Go exe、Python 可执行目录、Milvus Lite 依赖、资源定位和启动参数 |
+| 03 | Data Directory & Migration | 安装目录 / 用户数据目录分离、升级 migration、备份和恢复提示 |
+| 04 | Security & Signing | Windows 签名、完整性校验、自动更新安全、供应链扫描和 Defender 误报治理 |
+| 05 | Clean Windows Verification | 无开发环境、普通用户权限、中文/空格路径、安装/升级/卸载验证 |
+| 06 | CI Artifact Workflow | GitHub Actions Windows workflow、缓存、artifact、校验和、版本元数据、构建日志 |
+| 07 | Install/Upgrade/Uninstall Test Plan | 首次启动、升级、卸载、数据保留、诊断包和 Cloud 构建隔离验收 |
 
 ---
 
@@ -45,9 +45,10 @@ Phase 2 不重新实现以下功能：
 - Local Proxy 和身份注入。
 - SQLite / Runtime Store / Milvus Lite / SegmentStore 真实链路。
 - 扫描、解析、索引、Chat/RAG 功能闭环。
-- 前端 Desktop 页面隐藏和 `/model-providers` 复用。
+- 前端 Desktop 页面隐藏、助手管理、扫描/索引状态和 `/model-providers` 复用。
+- Credential、日志脱敏、诊断包内容边界、IPC allowlist 和本地安全基线。
 
-Phase 2 只验证这些 Phase 1 功能在安装包环境中的资源定位、进程启动、数据保留、权限和诊断行为。
+Phase 2 只验证这些 Phase 1 功能在安装包环境中的资源定位、进程启动、数据保留、权限、签名/完整性和诊断行为。
 
 ---
 
@@ -63,4 +64,4 @@ Phase 2 只验证这些 Phase 1 功能在安装包环境中的资源定位、进
 8. 卸载行为符合设计。
 9. 诊断包可导出且脱敏。
 10. Cloud/Server Mode 构建不受影响。
-11. GitHub CI 生成 installer artifact、SHA256、commit SHA 和构建日志。
+11. GitHub CI 生成 installer artifact、SHA256、commit SHA、版本元数据和构建日志。

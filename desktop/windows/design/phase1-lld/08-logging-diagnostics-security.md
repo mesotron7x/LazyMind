@@ -540,7 +540,7 @@ export function getAllowedPathPrefixes(): string[] {
 
 ### 4.9 Secret 管理
 
-MVP 阶段：
+Phase 1 本地开发配置边界：
 
 ```yaml
 # config.yaml 中的 secret 存储（明文，但受文件系统权限保护）
@@ -551,10 +551,10 @@ model:
 # 脱敏规则确保此 key 不进入日志和诊断包
 ```
 
-后续阶段（完整功能）将引入 Windows Credential Manager：
+Phase 1 Credential 边界按 `16-credential-security.md` 实现，可使用 Windows Credential Manager 或 DPAPI/fallback：
 
 ```typescript
-// 后续实现，MVP 不要求
+// Phase 1 credential backend, see 16-credential-security.md
 import keytar from 'keytar';
 await keytar.setPassword('LazyMind', 'model-api-key', apiKey);
 const key = await keytar.getPassword('LazyMind', 'model-api-key');
@@ -641,7 +641,7 @@ const key = await keytar.getPassword('LazyMind', 'model-api-key');
 
 ### 8.1 安全审计检查清单
 
-MVP 阶段必须通过的安全检查：
+Phase 1 必须通过的安全检查：
 
 - [ ] `nodeIntegration: false` 在所有 BrowserWindow 中。
 - [ ] `contextIsolation: true` 在所有 BrowserWindow 中。
@@ -705,7 +705,7 @@ MVP 阶段必须通过的安全检查：
 
 安全配置仅影响 Electron 运行环境，Cloud 模式（Docker + Nginx）不受影响。
 
-脱敏规则可被后端复用（如有需要），但 MVP 阶段仅在 Electron 层应用。
+脱敏规则可被后端复用（如有需要），Phase 1 至少在 Electron 层应用，后端如复用需遵循同一脱敏规则。
 
 ---
 

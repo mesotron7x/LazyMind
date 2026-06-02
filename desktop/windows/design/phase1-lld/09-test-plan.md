@@ -1,4 +1,4 @@
-# Phase 1 MVP 测试计划
+# Phase 1 功能实现测试计划
 
 ## Context
 
@@ -313,7 +313,7 @@ L5 Platform    -                E2E-P01~P03         E2E-P04~P05
 2. **两个以上模块联调**：执行相关 L2 Integration
 3. **影响共享代码时**：执行 L3 Regression
 4. **安全相关模块完成**：执行 L4 Security Baseline
-5. **MVP 里程碑前**：执行全部 E2E + L5 Platform
+5. **Phase 1 总体验收前**：执行全部 E2E + L5 Platform
 
 ### 工具建议
 

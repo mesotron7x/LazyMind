@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the implementation plan for new Phase 2: Windows installer packaging. Feature completion belongs to new Phase 1. Phase 2 starts only after `make desktop-dev-windows-exe` can produce a working `~/LazyMind/` directory with `LazyMind.exe`.
+This document describes the implementation plan for new Phase 2: Windows installer packaging. Feature completion belongs to new Phase 1. Phase 2 starts only after `make windows-desktop` can produce a working `~/LazyMind/` directory with `LazyMind.exe`.
 
 ---
 
