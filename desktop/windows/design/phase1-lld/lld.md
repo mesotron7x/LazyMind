@@ -2,7 +2,7 @@
 
 ## 1. 背景
 
-本目录包含 LazyMind Desktop Mode 新版 Phase 1 的 Low-Level Design。新版 Phase 1 合并原前两个阶段：不再只验证桌面主链路，而是要在本地 build 出自包含运行目录 `~/LazyMind_dev/`，目录内 `LazyMind.exe` 可双击启动，并在功能层面等效大部分 Web 版。
+本目录包含 LazyMind Desktop Mode 新版 Phase 1 的 Low-Level Design。新版 Phase 1 合并原前两个阶段：不再只验证桌面主链路，而是要在本地 build 出自包含运行目录 `~/LazyMind/`，目录内 `LazyMind.exe` 可双击启动，并在功能层面等效大部分 Web 版。
 
 原 `phase2-lld/` 中的 SQLite Complete、Milvus Lite、SegmentStore、Algorithm Pipeline、Runtime Store Hardening、Frontend Complete、Credential Security 和 Test Plan 设计，全部作为新版 Phase 1 的输入并入本阶段。新版 Phase 2 只保留安装包、升级、卸载、签名和 CI artifact 相关工作。
 
@@ -10,7 +10,7 @@
 
 ## 2. 设计目标
 
-1. **可双击运行**：`make desktop-dev-windows-exe` 生成 `~/LazyMind_dev/`，其中 `LazyMind.exe` 是人工验证入口，双击启动不弹出终端窗口。
+1. **可双击运行**：`make desktop-dev-windows-exe` 生成 `~/LazyMind/`，其中 `LazyMind.exe` 是人工验证入口，双击启动不弹出终端窗口。
 2. **功能闭环**：扫描、解析、索引、Milvus Lite 向量、SegmentStore 本地检索、Chat/RAG、技能、会话、模型配置形成真实本地链路。
 3. **桌面体验**：免登录、隐藏登录/RBAC/用户角色/Evo 入口，前台统一展示 AI 助手。
 4. **助手隔离**：当前助手就是当前请求用户，Chat、技能、知识库、记忆、偏好按助手隔离，至少验证 50 个助手。
@@ -25,7 +25,7 @@
 
 | # | 模块 | 主要参考文档 | 新版 Phase 1 范围 |
 |---|------|--------------|-------------------|
-| 01 | Electron Shell & 自包含目录 | `01-electron-shell.md` + one-off | Electron 壳、自定义协议、无菜单栏、`LazyMind.exe` launcher、图标、`~/LazyMind_dev/` |
+| 01 | Electron Shell & 自包含目录 | `01-electron-shell.md` + one-off | Electron 壳、自定义协议、无菜单栏、`LazyMind.exe` launcher、图标、`~/LazyMind/` |
 | 02 | Windows Build Workflow | one-off | `desktop-dev-windows-exe`、自动 clean、PowerShell 兼容、配置复制、`nul` artifact 检查 |
 | 03 | Process Manager | `02-process-manager.md` | 启动/监控/关闭 Go/Python 服务，隐藏控制台窗口，健康检查，日志接入 |
 | 04 | Local Proxy & Identity Injection | `03-local-proxy.md` | 替代 Kong，REST/SSE/upload/download，覆盖 `X-User-ID`，注入本地 secret |
@@ -117,7 +117,7 @@
 | 生产方 | 消费方 | 契约内容 |
 |--------|--------|----------|
 | 01 | 02/03/13 | `DataDirPaths`、资源目录、`LazyMind.exe` launcher 路径 |
-| 02 | 14 | `~/LazyMind_dev/` 输出结构、build clean 规则、配置复制规则 |
+| 02 | 14 | `~/LazyMind/` 输出结构、build clean 规则、配置复制规则 |
 | 03 | 04/13 | 服务端口、健康状态、stdout/stderr 日志流 |
 | 04 | 05/10/11 | API base URL、`X-User-ID` 覆盖规则、`X-Desktop-Secret` |
 | 05 | 04/11 | 当前助手 ID、助手列表、助手 CRUD API |
@@ -134,8 +134,8 @@
 ## 7. Phase 1 验收总览
 
 1. `make desktop-dev-windows-exe` 在 Windows PowerShell 环境可执行。
-2. build 前自动终止旧进程并清除旧 `~/LazyMind_dev/`。
-3. `~/LazyMind_dev/LazyMind.exe` 双击启动，无终端窗口。
+2. build 前自动终止旧进程并清除旧 `~/LazyMind/`。
+3. `~/LazyMind/LazyMind.exe` 双击启动，无终端窗口。
 4. Desktop UI 无默认 Electron 菜单栏。
 5. 应用内 `lazymind:` 链接不会触发 unsupported protocol。
 6. 无需登录，直接进入主界面。

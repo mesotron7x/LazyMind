@@ -938,7 +938,7 @@ cd desktop/cmd/launcher && go generate
 # 编译（无控制台窗口、去调试符号）
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build \
   -ldflags "-H=windowsgui -s -w" \
-  -o ~/LazyMind_dev/LazyMind.exe .
+  -o ~/LazyMind/LazyMind.exe .
 ```
 
 ### 13.6 goversioninfo 配置

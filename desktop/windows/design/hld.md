@@ -420,7 +420,7 @@ Windows 是首个交付平台，也是本方案重点。macOS 不进入 Windows 
 
 - Electron 桌面壳可运行。
 - 本地后端可由 Electron 启动和关闭。
-- 本地可 build 出自包含运行目录 `~/LazyMind_dev/`。
+- 本地可 build 出自包含运行目录 `~/LazyMind/`。
 - 自包含目录中包含 `LazyMind.exe` 主程序，双击即可启动应用，且不弹出终端窗口。
 - build 前自动清理旧进程和旧输出目录，避免 Windows 文件占用导致构建失败。
 - 构建命令使用 Windows 原生命令或 PowerShell，不依赖 `sed`、`sleep`、`grep` 等 Unix-only 工具。
@@ -1171,16 +1171,16 @@ Phase 1 自包含运行目录使用 Go 编译的 `LazyMind.exe` 替代 `LazyMind
 - 子进程使用 `CREATE_NO_WINDOW` 标志启动，避免闪现控制台。
 - Electron 退出后清理后端进程树。
 
-Phase 1 输出目录为 `~/LazyMind_dev/`，目录内 `LazyMind.exe` 双击可启动，用于开发和人工验证。Phase 2 安装包阶段由 electron-builder 产出最终带签名或待签名的 `LazyMind.exe`（Electron 本体），此 Go launcher 仅用于自包含开发包和无安装器分发场景。
+Phase 1 输出目录为 `~/LazyMind/`，目录内 `LazyMind.exe` 双击可启动，用于开发和人工验证。Phase 2 安装包阶段由 electron-builder 产出最终带签名或待签名的 `LazyMind.exe`（Electron 本体），此 Go launcher 仅用于自包含开发包和无安装器分发场景。
 
 ### 3.17.4 开发构建入口
 
 Phase 1 需要提供 Windows 原生可用的开发构建入口：
 
 - Makefile target 名称为 `desktop-dev-windows-exe`。
-- 构建产物输出到 `~/LazyMind_dev/`，不写入系统根目录。
+- 构建产物输出到 `~/LazyMind/`，不写入系统根目录。
 - 每次 build 前自动终止旧 `LazyMind.exe`、Electron 和后端进程，避免文件被占用。
-- 每次 build 前清除旧 `~/LazyMind_dev/` 目录后重新生成。
+- 每次 build 前清除旧 `~/LazyMind/` 目录后重新生成。
 - Makefile 命令必须兼容 Windows，使用 PowerShell 或 Windows 原生命令，禁止依赖 `sed`、`sleep`、`grep` 等 Unix-only 工具。
 - PowerShell 7 下需要确保 Node.js、`npm`、`npx`、`pnpm` 等命令可解析。
 - Vite `outDir` 位于 project root 外时，构建命令必须带 `--emptyOutDir`，避免旧前端资源残留。
@@ -1194,7 +1194,7 @@ Phase 1 需要提供 Windows 原生可用的开发构建入口：
 
 本章只做任务拆分和依赖识别，不做工作量预估。新版阶段划分如下：
 
-- **Phase 1：功能实现**。合并原前两个阶段，目标是在本地 build 出自包含目录 `~/LazyMind_dev/` 和 `LazyMind.exe` 主程序，双击即可启动，并在功能层面等效大部分 Web 版。
+- **Phase 1：功能实现**。合并原前两个阶段，目标是在本地 build 出自包含目录 `~/LazyMind/` 和 `LazyMind.exe` 主程序，双击即可启动，并在功能层面等效大部分 Web 版。
 - **Phase 2：打安装包**。目标是在 Phase 1 功能完成基础上生成 Windows installer，完成干净环境安装、升级、卸载、签名和 CI artifact。
 
 ## 4.1 Phase 1：功能实现
@@ -1209,8 +1209,8 @@ Phase 1 重点包括：
 - 前端资源通过自定义协议加载。
 - 本地 Go/Python 后端启动、健康检查和关闭。
 - 本地 API 代理与当前助手身份注入。
-- 自包含输出目录 `~/LazyMind_dev/`。
-- `~/LazyMind_dev/LazyMind.exe` 双击启动，无控制台窗口。
+- 自包含输出目录 `~/LazyMind/`。
+- `~/LazyMind/LazyMind.exe` 双击启动，无控制台窗口。
 - 免登录。
 - 默认 AI 助手初始化。
 - 新建和切换 AI 助手。
@@ -1246,7 +1246,7 @@ Phase 1 重点包括：
 
 - 提供 `make desktop-dev-windows-exe` target。
 - build 前自动终止旧进程。
-- build 前清除旧 `~/LazyMind_dev/`。
+- build 前清除旧 `~/LazyMind/`。
 - 构建前端、Electron Main/Preload、Go 后端、Python 后端或 Python 可执行目录。
 - 复制必要资源、默认文档、模板配置、gitignored 本地开发配置到输出目录。
 - 生成或复制 `LazyMind.exe` GUI 子系统启动器。
@@ -1625,7 +1625,7 @@ Local Stores
   ├─ local files
   └─ logs
 
-~/LazyMind_dev/
+~/LazyMind/
   ├─ LazyMind.exe
   ├─ electron/
   ├─ renderer/
@@ -1723,8 +1723,8 @@ Phase 1 暂不设计其他向量方案。如果验证不理想，再根据实测
 
 #### Windows 自包含目录
 
-- `make desktop-dev-windows-exe` 生成 `~/LazyMind_dev/`。
-- `~/LazyMind_dev/LazyMind.exe` 是唯一人工验证入口。
+- `make desktop-dev-windows-exe` 生成 `~/LazyMind/`。
+- `~/LazyMind/LazyMind.exe` 是唯一人工验证入口。
 - 构建前自动 clean，并清理旧进程。
 - 构建脚本使用 Windows 原生命令或 PowerShell。
 - 本地开发配置可通过 gitignored 文件复制到输出目录。
@@ -1768,7 +1768,7 @@ Phase 1 不可接受：
 - 打开应用仍要求登录。
 - 无法创建或切换 AI 助手。
 - 当前助手身份无法传到后端。
-- 没有 `~/LazyMind_dev/LazyMind.exe` 作为双击启动入口。
+- 没有 `~/LazyMind/LazyMind.exe` 作为双击启动入口。
 - 关闭应用后子进程残留。
 - 没有日志可诊断。
 - Milvus Lite 未接入真实向量链路。

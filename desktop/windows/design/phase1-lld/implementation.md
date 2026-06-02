@@ -4,8 +4,8 @@
 
 This document is the implementation plan for LazyMind Desktop Mode new Phase 1. New Phase 1 merges the old first two stages. The target is:
 
-- Build a self-contained Windows development output at `~/LazyMind_dev/`.
-- Provide `~/LazyMind_dev/LazyMind.exe` as the double-click entrypoint.
+- Build a self-contained Windows development output at `~/LazyMind/`.
+- Provide `~/LazyMind/LazyMind.exe` as the double-click entrypoint.
 - Run without Docker and without manually starting backend services.
 - Deliver most Web-version functionality through Desktop Mode: assistants, skills, knowledge base, scan/parse/index/chat, model configuration, logs, diagnostics.
 - Hide Desktop-removed UI surfaces: login, register, role/user management complexity, RBAC configuration, Evo.
@@ -31,11 +31,11 @@ This document is the implementation plan for LazyMind Desktop Mode new Phase 1. 
 **Goal:** Make the build target and output layout explicit before implementation.
 
 **Actions:**
-1. Define output root: `~/LazyMind_dev/`.
-2. Define entrypoint: `~/LazyMind_dev/LazyMind.exe`.
+1. Define output root: `~/LazyMind/`.
+2. Define entrypoint: `~/LazyMind/LazyMind.exe`.
 3. Define required output subdirectories:
    ```text
-   ~/LazyMind_dev/
+   ~/LazyMind/
      LazyMind.exe
      electron/
      renderer/
@@ -60,7 +60,7 @@ This document is the implementation plan for LazyMind Desktop Mode new Phase 1. 
 **Goal:** Validate build scripts before wiring expensive builds.
 
 **Tests:**
-1. `desktop-dev-windows-exe` removes old `~/LazyMind_dev/`.
+1. `desktop-dev-windows-exe` removes old `~/LazyMind/`.
 2. Old `LazyMind.exe`, Electron, and managed backend processes are terminated before deletion.
 3. Script contains no Unix-only commands: `sed`, `sleep`, `grep`, `rm -rf`, `cp -r` in Windows target.
 4. Script does not create a real `nul` file.
@@ -70,7 +70,7 @@ This document is the implementation plan for LazyMind Desktop Mode new Phase 1. 
 1. Add or update `make desktop-dev-windows-exe`.
 2. Implement PowerShell helper scripts under a Desktop build scripts directory.
 3. Use `Remove-Item`, `Copy-Item`, `Start-Process`, `Stop-Process`, `Test-Path`, `New-Item` instead of Unix commands.
-4. Add a post-build check for `~/LazyMind_dev/nul`.
+4. Add a post-build check for `~/LazyMind/nul`.
 
 **Verify:**
 - Target can be invoked from Windows PowerShell.
@@ -92,7 +92,7 @@ This document is the implementation plan for LazyMind Desktop Mode new Phase 1. 
 **Verify:**
 - Web build succeeds.
 - Desktop renderer build succeeds.
-- Desktop renderer output is copied to `~/LazyMind_dev/renderer/`.
+- Desktop renderer output is copied to `~/LazyMind/renderer/`.
 
 ---
 
@@ -178,7 +178,7 @@ This document is the implementation plan for LazyMind Desktop Mode new Phase 1. 
 
 **Actions:**
 1. Define service configs for core, auth-service, algorithm service, scan-control-plane, file-watcher.
-2. Start services from `~/LazyMind_dev/bin/` and `~/LazyMind_dev/python-services/`.
+2. Start services from `~/LazyMind/bin/` and `~/LazyMind/python-services/`.
 3. Inject Desktop mode env vars, DB paths, local secret, log paths.
 4. Capture stdout/stderr into module logs.
 5. Surface service status to renderer.
@@ -497,7 +497,7 @@ This document is the implementation plan for LazyMind Desktop Mode new Phase 1. 
 4. Remove or unlink reverted Desktop-only local file config approach.
 
 **Verify:**
-- After rebuilding `~/LazyMind_dev/`, model config does not require manual re-entry when a local dev config exists.
+- After rebuilding `~/LazyMind/`, model config does not require manual re-entry when a local dev config exists.
 
 ---
 
@@ -577,8 +577,8 @@ This document is the implementation plan for LazyMind Desktop Mode new Phase 1. 
 
 **Verify:**
 1. Run `make desktop-dev-windows-exe`.
-2. Confirm `~/LazyMind_dev/LazyMind.exe` exists.
-3. Confirm `~/LazyMind_dev/nul` does not exist.
+2. Confirm `~/LazyMind/LazyMind.exe` exists.
+3. Confirm `~/LazyMind/nul` does not exist.
 4. Double-click or start `LazyMind.exe`.
 5. Confirm no console window.
 6. Confirm main UI appears.
@@ -643,8 +643,8 @@ This document is the implementation plan for LazyMind Desktop Mode new Phase 1. 
 
 Phase 1 is complete only when all of the following are true:
 
-1. `make desktop-dev-windows-exe` builds `~/LazyMind_dev/` on Windows.
-2. `~/LazyMind_dev/LazyMind.exe` launches the app by double-click.
+1. `make desktop-dev-windows-exe` builds `~/LazyMind/` on Windows.
+2. `~/LazyMind/LazyMind.exe` launches the app by double-click.
 3. Desktop app requires no Docker and no manual backend startup.
 4. Most Web functionality is available through Desktop Mode local services.
 5. HLD-removed functions are hidden or disabled in Desktop UI.

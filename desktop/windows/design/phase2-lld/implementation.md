@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the implementation plan for new Phase 2: Windows installer packaging. Feature completion belongs to new Phase 1. Phase 2 starts only after `make desktop-dev-windows-exe` can produce a working `~/LazyMind_dev/` directory with `LazyMind.exe`.
+This document describes the implementation plan for new Phase 2: Windows installer packaging. Feature completion belongs to new Phase 1. Phase 2 starts only after `make desktop-dev-windows-exe` can produce a working `~/LazyMind/` directory with `LazyMind.exe`.
 
 ---
 
@@ -13,7 +13,7 @@ This document describes the implementation plan for new Phase 2: Windows install
 **Goal:** Treat the Phase 1 self-contained directory as installer input.
 
 **Actions:**
-1. Document required files from `~/LazyMind_dev/`.
+1. Document required files from `~/LazyMind/`.
 2. Identify which files become installer resources.
 3. Identify which files must move to user data directory on first launch.
 4. Define version metadata and artifact naming.

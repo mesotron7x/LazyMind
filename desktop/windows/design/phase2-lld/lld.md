@@ -10,7 +10,7 @@
 
 ## 2. Phase 2 目标
 
-1. 基于 Phase 1 已验证的 `~/LazyMind_dev/` 自包含目录，生成 Windows installer。
+1. 基于 Phase 1 已验证的 `~/LazyMind/` 自包含目录，生成 Windows installer。
 2. 安装后无需 Docker、Node、Go、Python 等开发环境。
 3. 安装目录与用户数据目录分离。
 4. Go 后端 exe、Python 可执行目录、Milvus Lite 依赖、Electron 资源均随包分发。
