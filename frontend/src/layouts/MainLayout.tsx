@@ -148,13 +148,14 @@ export default function MainLayout() {
       icon: <ApiOutlined />,
     },
   ];
+  const hideEvo = !!import.meta.env.VITE_HIDE_EVO;
   const aiEvolutionNavItems = [
     {
       key: "/memory-management",
       label: t("layout.memoryManagement"),
       icon: <AppstoreOutlined />,
     },
-    ...(isAdminUser && developerActive
+    ...(isAdminUser && developerActive && !hideEvo
       ? [
           {
             key: "/self-evolution",
@@ -239,10 +240,10 @@ export default function MainLayout() {
   }, [developerActive, isAdminUser]);
 
   useEffect(() => {
-    if (pathname.startsWith("/self-evolution") && (!isAdminUser || !developerActive)) {
+    if (pathname.startsWith("/self-evolution") && (hideEvo || !isAdminUser || !developerActive)) {
       navigate("/agent/chat", { replace: true });
     }
-  }, [pathname, isAdminUser, developerActive, navigate]);
+  }, [pathname, isAdminUser, developerActive, navigate, hideEvo]);
 
   useEffect(() => {
     if (!pathname.startsWith("/agent/chat")) {
