@@ -154,7 +154,7 @@ Detailed interfaces, schemas, APIs, file manifests, and acceptance details live 
 
 **Refs:** `09-test-plan.md`, `17-test-plan.md`
 
-**Outcome:** `make windows-desktop` produces `~/LazyMind/LazyMind.exe`; launch, first window, service startup, proxy readiness, and close cleanup work without Docker or manual backend startup.
+**Outcome:** `make windows-desktop` produces `~/LazyMind/LazyMind.exe`; launch, first window, service startup, proxy readiness, and close cleanup work without Docker, Node, Go, Python, or manual backend startup.
 
 ### Step 4.2 [SEQUENTIAL] — Functional loop smoke
 

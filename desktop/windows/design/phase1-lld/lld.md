@@ -13,7 +13,7 @@ Phase 2 只负责把 Phase 1 的完整能力封装为 Windows installer，并验
 1. **自包含可运行**：`make windows-desktop` 生成 `~/LazyMind/`，其中 `LazyMind.exe` 是人工验证入口，双击启动不弹出终端窗口。
 2. **完整功能闭环**：扫描、解析、分段、embedding、Milvus Lite 向量、SegmentStore 本地检索、Chat/RAG、技能、会话和模型配置形成真实本地链路。
 3. **桌面身份模型**：免登录，前台统一使用“AI 助手”；当前助手就是当前请求身份，Chat、技能、知识库、记忆、偏好按助手隔离。
-4. **本地服务自治**：Electron 负责启动、健康检查、日志采集、错误展示和关闭本地 Go/Python 服务，用户不需要 Docker 或手工启动后端。
+4. **本地服务自治**：Electron 负责启动、健康检查、日志采集、错误展示和关闭本地 Go/Python 服务，用户不需要 Docker、Node、Go、Python 等开发环境，也不需要手工启动后端。
 5. **本地数据自治**：SQLite、Runtime Store、Milvus Lite、SegmentStore 和文件目录按 Desktop 数据目录落盘，并与 Cloud/Server Mode 显式隔离。
 6. **安全和诊断内建**：BrowserWindow、Preload/IPC、Local Proxy、Credential、日志、诊断包、子进程和文件访问边界在 Phase 1 内完成。
 7. **Cloud 兼容**：所有 Desktop 变更通过显式模式开关隔离，不破坏 Cloud 的 Docker、Kong、PostgreSQL、Redis、Milvus、OpenSearch 路线。

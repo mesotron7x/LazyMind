@@ -4,7 +4,7 @@
 
 ### 1.1 目标
 
-建立 Desktop Mode 的 Electron 工程骨架，包括：
+建立 Desktop Mode 的 Electron 基础工程，包括：
 
 - Electron Main Process 启动和窗口管理。
 - 自定义协议 `lazymind://` 注册，用于加载前端 SPA。
