@@ -273,12 +273,16 @@
 **L2 Integration - 主链路验证**
 | ID | 场景 | 预期 |
 |----|------|------|
+| E2E-00 | 自包含构建与启动 | 执行 `make windows-desktop` → 生成 `~/LazyMind/` → 从 app 目录运行 `~/LazyMind/LazyMind.exe` → Playwright/Electron 接管窗口 |
 | E2E-01 | 首次启动全流程 | 双击 → splash → 服务启动 → 主界面 → 默认助手已选中 |
 | E2E-02 | 新建助手→切换→Chat | 新建"物理学家" → 切换 → 发起 Chat → 后端收到物理学家的 user_id |
-| E2E-03 | 添加扫描路径 | 选择目录 → 后端收到路径 → 扫描任务创建 |
-| E2E-04 | 应用关闭全流程 | 点击关闭 → 所有后端进程退出 → 无残留 → 数据持久 |
-| E2E-05 | 重启恢复 | 重启 → 上次助手恢复 → 上次会话可见 → 数据完整 |
-| E2E-06 | 后端崩溃恢复 | kill core 进程 → 自动重启 → 健康恢复 → 功能可用 |
+| E2E-03 | Dynamic 模型配置 | 从空模型配置启动 → 读取 `~/models.md` → 通过 `/model-providers` UI 配置 SiliconFlow base URL / API key、Qwen 系列模型和 MinerU token → 连接测试通过 |
+| E2E-04 | 添加测试知识库路径 | 选择 `~/docs` → 后端收到路径 → 扫描任务创建 |
+| E2E-05 | 知识库入库与召回 | `~/docs` 文档完成解析/分段/向量索引/SegmentStore 索引 → 搜索返回相关 chunks |
+| E2E-06 | RAG 问答 | 发起依赖 `~/docs` 内容的问题 → Chat/RAG 回答使用召回 chunks，来源可见 |
+| E2E-07 | 应用关闭全流程 | 点击关闭 → 所有后端进程退出 → 无残留 → 数据持久 |
+| E2E-08 | 重启恢复 | 重启 → 上次助手恢复 → 上次会话可见 → 数据完整 |
+| E2E-09 | 后端崩溃恢复 | kill core 进程 → 自动重启 → 健康恢复 → 功能可用 |
 
 **L5 Platform - Windows 环境验证**
 | ID | 场景 | 预期 |
@@ -301,7 +305,7 @@ L0 Smoke     M1-S01~S03        M2-S01~S04          -
              M5-S01~S03        M3-S01~S03
 L1 Contract  M3-C01~C04        M4-C01~C06          M1-C03~C05
              M6-C01~C03        M5-C01~C05
-L2 Integration E2E-01~02       E2E-03~06           M7-I02~I03
+L2 Integration E2E-01~03       E2E-04~09           M7-I02~I03
 L3 Regression  M4-R01~R02      M5-R01~R02          M6-R01
 L4 Security    M3-X01~X04      M1-X01~X05          M8-X01~X04
 L5 Platform    -                E2E-P01~P03         E2E-P04~P05

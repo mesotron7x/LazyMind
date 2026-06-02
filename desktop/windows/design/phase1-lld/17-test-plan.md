@@ -24,7 +24,53 @@ Define the comprehensive testing strategy for Phase 1 Desktop functional deliver
 
 ---
 
-## 2. Test Architecture
+## 2. Phase 1 Acceptance E2E Contract
+
+Phase 1 acceptance is defined by UI-level E2E against the self-contained app directory, not by backend-only tests or preloaded configuration.
+
+### 2.1 Build and Launch
+
+1. Build the app with `make windows-desktop`.
+2. Launch the produced app from the app directory by running `~/LazyMind/LazyMind.exe`.
+3. Run Playwright + Electron tests against that running desktop app. Tests must exercise the UI and Local Proxy path; direct backend calls are allowed only for health checks and diagnostics.
+
+### 2.2 Local Acceptance Inputs
+
+The tester provides local-only files before running E2E:
+
+- `~/docs/`: knowledge-base documents used for ingestion, indexing, retrieval, and RAG Q&A.
+- `~/models.md`: local secrets and endpoint notes for the test run, including SiliconFlow API base URL, SiliconFlow API key, Qwen-series model names to use, and MinerU API token.
+
+`~/models.md` must never be copied into the repo, included in screenshots, written to logs, or exported in diagnostics. Test output may only show redacted key/token values.
+
+### 2.3 Model Configuration Acceptance Mode
+
+The acceptance standard is **dynamic mode**:
+
+1. Start the app without relying on inner/public preconfigured model state.
+2. Use the UI model configuration flow (`/model-providers`) to add SiliconFlow configuration from `~/models.md`.
+3. Select Qwen-series models for chat/RAG and the corresponding Qwen-compatible embedding/retrieval models supported by the configured provider.
+4. Configure MinerU token through the approved UI/configuration path when document parsing tests require online parsing.
+5. Verify the connection through the UI before running ingestion and Q&A tests.
+
+`inner` mode and `public` mode may exist for other use cases, but they are not Phase 1 acceptance standards. E2E runs that pass only by using inner/public preconfiguration do not count as acceptance passes.
+
+### 2.4 Required UI E2E Pass Criteria
+
+The E2E suite must pass all of the following through the desktop UI:
+
+- Launch `~/LazyMind/LazyMind.exe`, reach the main UI, and confirm local services become healthy.
+- Configure SiliconFlow / Qwen models dynamically from `~/models.md`; no mock-model warning remains for the configured flow.
+- Add `~/docs` as the knowledge-base source.
+- Complete document ingestion, parsing, segmentation, vector indexing, and SegmentStore indexing.
+- Ask questions whose answers require content from `~/docs`.
+- Verify retrieval returns relevant source chunks from the ingested documents and Chat/RAG answers use those chunks.
+- Verify failure messages are clear if SiliconFlow, Qwen model selection, or MinerU credentials are invalid.
+- Close the app and verify child processes exit cleanly.
+
+---
+
+## 3. Test Architecture
 
 ### 2.1 Test Layers
 
@@ -78,7 +124,7 @@ tests/
 
 ---
 
-## 3. Integration Test Scenarios
+## 4. Integration Test Scenarios
 
 ### 3.1 Document Pipeline (Parse → Index → Search)
 
@@ -307,7 +353,7 @@ test.describe('Service Health', () => {
 
 ---
 
-## 4. Performance Benchmarks
+## 5. Performance Benchmarks
 
 ### 4.1 Cold Start Time
 
@@ -456,7 +502,7 @@ class ConcurrencyBenchmark:
 
 ---
 
-## 5. Test Environment
+## 6. Test Environment
 
 ### 5.1 Local Test Setup
 
@@ -529,7 +575,7 @@ Each test suite:
 
 ---
 
-## 6. Test Coverage Matrix
+## 7. Test Coverage Matrix
 
 ### 6.1 Module Coverage
 
@@ -558,7 +604,7 @@ Each test suite:
 
 ---
 
-## 7. Acceptance Test Mapping
+## 8. Acceptance Test Mapping
 
 Each Phase 1 acceptance criterion mapped to a specific test:
 
@@ -582,7 +628,7 @@ Each Phase 1 acceptance criterion mapped to a specific test:
 
 ---
 
-## 8. Test Data Management
+## 9. Test Data Management
 
 ### 8.1 Fixture Generation
 
@@ -630,7 +676,7 @@ async def mock_chat(request: ChatRequest):
 
 ---
 
-## 9. Regression Prevention
+## 10. Regression Prevention
 
 ### 9.1 Snapshot Tests
 
@@ -656,10 +702,12 @@ func TestAPICompatibility(t *testing.T) {
 
 ---
 
-## 10. Acceptance Criteria (for this LLD)
+## 11. Acceptance Criteria (for this LLD)
 
 - [ ] Integration test framework set up and runnable locally.
-- [ ] Document pipeline E2E test passes (parse → index → search).
+- [ ] `make windows-desktop` builds `~/LazyMind/`, and UI E2E launches `~/LazyMind/LazyMind.exe` from that app directory.
+- [ ] Dynamic model configuration E2E passes using `~/models.md` → `/model-providers` → SiliconFlow / Qwen models; inner/public preconfiguration is not used for acceptance.
+- [ ] Document pipeline E2E test passes using `~/docs` (parse → segment → vector index → SegmentStore index → search).
 - [ ] Chat RAG E2E test passes (question → sources in response).
 - [ ] 50-assistant isolation test passes.
 - [ ] Runtime store recovery test passes.

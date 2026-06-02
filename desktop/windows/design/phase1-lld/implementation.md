@@ -122,7 +122,7 @@ Detailed interfaces, schemas, APIs, file manifests, and acceptance details live 
 
 **Refs:** `16-credential-security.md`, `13-algorithm-pipeline.md`, `15-frontend-complete.md`
 
-**Outcome:** Desktop reuses `/model-providers`, supports inner and dynamic model configuration, keeps API keys out of logs/diagnostics, and exposes secrets to backend services only through the approved credential bridge.
+**Outcome:** Desktop reuses `/model-providers`; dynamic GUI configuration is the Phase 1 acceptance path, while inner/public may exist outside acceptance. API keys stay out of logs/diagnostics and reach backend services only through the approved credential bridge.
 
 ---
 
@@ -138,7 +138,7 @@ Detailed interfaces, schemas, APIs, file manifests, and acceptance details live 
 
 **Refs:** `15-frontend-complete.md`, `13-algorithm-pipeline.md`, `17-test-plan.md`
 
-**Outcome:** Users can choose scan folders, see parse/index progress, distinguish local service/model/indexing errors, understand mock model state, and reach `/model-providers` to configure real providers.
+**Outcome:** Users can choose scan folders, see parse/index progress, distinguish local service/model/indexing errors, and use `/model-providers` to configure real SiliconFlow / Qwen models dynamically for acceptance.
 
 ### Step 3.3 [TEST-FIRST] [PARALLEL] — Native capabilities through controlled IPC
 
@@ -154,13 +154,13 @@ Detailed interfaces, schemas, APIs, file manifests, and acceptance details live 
 
 **Refs:** `09-test-plan.md`, `17-test-plan.md`
 
-**Outcome:** `make windows-desktop` produces `~/LazyMind/LazyMind.exe`; launch, first window, service startup, proxy readiness, and close cleanup work without Docker, Node, Go, Python, or manual backend startup.
+**Outcome:** `make windows-desktop` produces `~/LazyMind/LazyMind.exe`; launch from the app directory, first window, service startup, proxy readiness, and close cleanup work without Docker, Node, Go, Python, or manual backend startup.
 
 ### Step 4.2 [SEQUENTIAL] — Functional loop smoke
 
 **Refs:** `13-algorithm-pipeline.md`, `15-frontend-complete.md`, `17-test-plan.md`
 
-**Outcome:** Default assistant and default document complete scan, parse, index, retrieve, Chat/RAG, source display, model state messaging, and user-visible error handling.
+**Outcome:** After `make windows-desktop`, automated UI E2E launches `~/LazyMind/LazyMind.exe`, configures SiliconFlow / Qwen models dynamically from `~/models.md`, ingests `~/docs`, verifies parse/index/vector/segment completion, verifies retrieval returns relevant chunks, and verifies Chat/RAG answers use those chunks with visible sources.
 
 ### Step 4.3 [SEQUENTIAL] — Isolation, persistence, and recovery
 

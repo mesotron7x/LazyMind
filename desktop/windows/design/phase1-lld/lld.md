@@ -15,8 +15,9 @@ Phase 2 只负责把 Phase 1 的完整能力封装为 Windows installer，并验
 3. **桌面身份模型**：免登录，前台统一使用“AI 助手”；当前助手就是当前请求身份，Chat、技能、知识库、记忆、偏好按助手隔离。
 4. **本地服务自治**：Electron 负责启动、健康检查、日志采集、错误展示和关闭本地 Go/Python 服务，用户不需要 Docker、Node、Go、Python 等开发环境，也不需要手工启动后端。
 5. **本地数据自治**：SQLite、Runtime Store、Milvus Lite、SegmentStore 和文件目录按 Desktop 数据目录落盘，并与 Cloud/Server Mode 显式隔离。
-6. **安全和诊断内建**：BrowserWindow、Preload/IPC、Local Proxy、Credential、日志、诊断包、子进程和文件访问边界在 Phase 1 内完成。
-7. **Cloud 兼容**：所有 Desktop 变更通过显式模式开关隔离，不破坏 Cloud 的 Docker、Kong、PostgreSQL、Redis、Milvus、OpenSearch 路线。
+6. **动态模型验收**：Phase 1 总体验收只接受 dynamic GUI 配置；自动化测试从本机 `~/models.md` 读取 SiliconFlow API base URL / API key 和 MinerU API token，并通过界面配置 Qwen 系列模型。
+7. **安全和诊断内建**：BrowserWindow、Preload/IPC、Local Proxy、Credential、日志、诊断包、子进程和文件访问边界在 Phase 1 内完成。
+8. **Cloud 兼容**：所有 Desktop 变更通过显式模式开关隔离，不破坏 Cloud 的 Docker、Kong、PostgreSQL、Redis、Milvus、OpenSearch 路线。
 
 ---
 
@@ -54,7 +55,7 @@ Phase 1 明确不把以下能力作为 Desktop 主界面功能：
 - 用户角色管理 / 复杂 RBAC：底层表、默认组、默认权限保留；前台入口隐藏。
 - 用户概念：前台统一改称“AI 助手”，新建用户显示为“新建 AI 助手”。
 - Evo：Desktop UI 和主链路不显示入口；后端如保留模块，必须通过模式开关禁用。
-- 模型配置：不新增 Desktop 专属简化页面，直接复用 `/model-providers`。
+- 模型配置：不新增 Desktop 专属简化页面，直接复用 `/model-providers`；Phase 1 总体验收以 dynamic 模式为准，inner / public 不作为验收标准。
 
 这些是产品范围裁剪，不是 Phase 1 未完成项。
 
@@ -147,11 +148,13 @@ Phase 1 明确不把以下能力作为 Desktop 主界面功能：
 7. 默认显示“天文学家”助手和约 100KB 太阳系 Markdown 示例文档。
 8. 可创建、切换、删除/归档 AI 助手，至少 50 个助手隔离验证通过。
 9. 前台不显示用户角色管理、复杂 RBAC、Evo、前往登录入口。
-10. `/model-providers` 可作为 Desktop 模型配置入口。
+10. `/model-providers` 可作为 Desktop 模型配置入口；验收测试必须从空配置启动，通过 UI 以 dynamic 模式配置 SiliconFlow / Qwen 系列模型，inner / public 模式不计入验收。
 11. SQLite、Runtime Store、Milvus Lite、SegmentStore 本地实现均进入真实链路。
-12. 默认文档可扫描、解析、索引，并进入 Chat/RAG 闭环；mock 模型状态下有明确提示和配置入口。
-13. 关闭应用后所有子进程退出。
-14. 重启后数据和上次助手选择保留。
-15. 诊断包可导出，且不含明文密钥、token、用户文档正文。
-16. BrowserWindow、Preload/IPC、Local Proxy、本地 secret、子进程、文件访问和日志脱敏安全 smoke 通过。
-17. Cloud/Server Mode 默认行为不变。
+12. `make windows-desktop` 构建出的自包含目录可运行；自动化从应用目录启动 `LazyMind.exe` 做界面级 E2E。
+13. `~/docs` 中的测试知识库文档可通过 UI 入库、解析、索引，并能在问答中被召回。
+14. 自动化测试使用 `~/models.md` 提供的 SiliconFlow API base URL / API key 和 MinerU API token，通过 dynamic 模式配置 Qwen 系列模型；mock、inner、public 模式不作为通过标准。
+15. 关闭应用后所有子进程退出。
+16. 重启后数据和上次助手选择保留。
+17. 诊断包可导出，且不含明文密钥、token、用户文档正文。
+18. BrowserWindow、Preload/IPC、Local Proxy、本地 secret、子进程、文件访问和日志脱敏安全 smoke 通过。
+19. Cloud/Server Mode 默认行为不变。
