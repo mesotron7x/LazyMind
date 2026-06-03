@@ -21,7 +21,8 @@ func main() {
 
 	setEnv(exeDir)
 
-	coreProc, err := startHidden(filepath.Join(exeDir, "bin", "core.exe"))
+	coreBin := filepath.Join(exeDir, "bin")
+	coreProc, err := startHidden(coreBin, filepath.Join(coreBin, "core.exe"))
 	if err != nil {
 		fatal("failed to start core: " + err.Error())
 	}
@@ -35,7 +36,7 @@ func main() {
 
 	electronExe := filepath.Join(exeDir, "electron", "electron.exe")
 	electronApp := filepath.Join(exeDir, "app")
-	electronProc, err := startHidden(electronExe, electronApp)
+	electronProc, err := startHidden(exeDir, electronExe, electronApp)
 	if err != nil {
 		killTree(coreProc)
 		fatal("failed to start electron: " + err.Error())
@@ -63,8 +64,9 @@ func setEnv(exeDir string) {
 	}
 }
 
-func startHidden(name string, args ...string) (*os.Process, error) {
+func startHidden(dir, name string, args ...string) (*os.Process, error) {
 	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
 	}

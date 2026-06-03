@@ -1,4 +1,7 @@
 # Code style: Python (flake8) + Go (gofmt). Mirrors algorithm/lazyllm Makefile pattern.
+ifeq ($(OS),Windows_NT)
+SHELL := C:/Program Files/Git/usr/bin/bash.exe
+endif
 .PHONY: help lint install-flake8 lint-python lint-go test build up up-build down clear reset-kb reset-all fresh-start file-watcher-dirs file-watcher-build file-watcher-run file-watcher-start file-watcher-stop windows-desktop
 .DEFAULT_GOAL := help
 
@@ -475,7 +478,7 @@ fresh-start: reset-kb
 # Prerequisites: Node.js, pnpm, Go 1.24+
 # Output: ~/LazyMind/ with LazyMind.exe launcher, Electron, frontend, core binary
 # ---------------------------------------------------------------------------
-LAZYMIND_OUTPUT_DIR ?= $(HOME)/LazyMind
+LAZYMIND_OUTPUT_DIR ?= $(subst \,/,$(HOME))/LazyMind
 DESKTOP_DIR := desktop/windows
 
 windows-desktop:
@@ -491,7 +494,10 @@ windows-desktop:
 	@cd frontend && pnpm install --frozen-lockfile && pnpm build
 	@cp -r frontend/dist/* "$(LAZYMIND_OUTPUT_DIR)/renderer/"
 	@echo "[4/7] Building Go core..."
-	@cd backend/core && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 $(GO) build -o "$(LAZYMIND_OUTPUT_DIR)/bin/core.exe" ./cmd/dbmigrate
+	@cd backend/core && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(LAZYMIND_OUTPUT_DIR)/bin/core.exe" .
+	@cp -r backend/core/migrations "$(LAZYMIND_OUTPUT_DIR)/bin/migrations"
+	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/config"
+	@cp backend/core/config/model_catalog.yaml "$(LAZYMIND_OUTPUT_DIR)/bin/config/model_catalog.yaml"
 	@echo "[5/7] Building Electron app..."
 	@cd $(DESKTOP_DIR)/electron && npm install && npm run build
 	@cp -r $(DESKTOP_DIR)/electron/dist/* "$(LAZYMIND_OUTPUT_DIR)/app/"
