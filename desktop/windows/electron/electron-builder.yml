@@ -1,0 +1,20 @@
+appId: com.lazymind.desktop
+productName: LazyMind
+directories:
+  output: dist-electron
+  buildResources: ../resources
+files:
+  - dist/main/**/*
+  - dist/preload/**/*
+extraResources:
+  - from: ../resources/default-docs
+    to: default-docs
+  - from: ../resources/templates
+    to: templates
+win:
+  target: nsis
+  icon: ../resources/icons/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false

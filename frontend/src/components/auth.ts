@@ -1,17 +1,15 @@
-/**
- * Minimal auth for LazyMind: getUserInfo from storage, logout redirect to /login.
- * Compatible with AuthServiceApi login (token stored after username/password login).
- */
 import axios from "axios";
+import { isDesktopMode, getDesktopApiBaseUrl } from "@/utils/desktop";
 
 const STORAGE_KEY = "lazymind:user";
 export const AUTH_USER_CHANGE_EVENT = "lazymind:user-change";
 
-const BASE_URL =
-  (typeof import.meta !== "undefined" &&
-    (import.meta as any).env?.VITE_API_BASE_URL) ||
-  (typeof window !== "undefined" && window.location.origin) ||
-  "";
+const BASE_URL = isDesktopMode()
+  ? getDesktopApiBaseUrl()
+  : (typeof import.meta !== "undefined" &&
+      (import.meta as any).env?.VITE_API_BASE_URL) ||
+    (typeof window !== "undefined" && window.location.origin) ||
+    "";
 
 function decodeBase64Url(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");

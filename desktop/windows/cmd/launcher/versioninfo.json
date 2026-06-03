@@ -1,0 +1,17 @@
+{
+  "FixedFileInfo": {
+    "FileVersion": {"Major": 0, "Minor": 1, "Patch": 0, "Build": 0},
+    "ProductVersion": {"Major": 0, "Minor": 1, "Patch": 0, "Build": 0},
+    "FileType": "App"
+  },
+  "StringFileInfo": {
+    "FileDescription": "LazyMind Desktop",
+    "ProductName": "LazyMind",
+    "CompanyName": "LazyMind",
+    "InternalName": "LazyMind",
+    "OriginalFilename": "LazyMind.exe",
+    "LegalCopyright": "Copyright 2024 LazyMind"
+  },
+  "IconPath": "../../resources/icons/icon.ico",
+  "ManifestPath": ""
+}

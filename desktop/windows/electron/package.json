@@ -1,0 +1,29 @@
+{
+  "name": "lazymind-desktop",
+  "version": "0.1.0",
+  "description": "LazyMind Desktop - Windows",
+  "main": "dist/main/main/index.js",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:preload\"",
+    "dev:main": "tsc -p tsconfig.json --watch",
+    "dev:preload": "tsc -p tsconfig.preload.json --watch",
+    "build": "npm run build:main && npm run build:preload",
+    "build:main": "tsc -p tsconfig.json",
+    "build:preload": "tsc -p tsconfig.preload.json",
+    "start": "electron dist/main/main/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.preload.json"
+  },
+  "dependencies": {
+    "http-proxy": "^1.18.1",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/http-proxy": "^1.17.14",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.11.0",
+    "concurrently": "^8.2.2",
+    "electron": "^33.0.0",
+    "typescript": "~5.5.0"
+  }
+}

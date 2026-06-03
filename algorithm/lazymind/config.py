@@ -35,6 +35,11 @@ config = Config(prefix='LAZYMIND', home='~/.lazyllm_rag')
 _LAZYMIND_ROOT = os.path.dirname(__file__)
 
 # ---------------------------------------------------------------------------
+# Mode
+# ---------------------------------------------------------------------------
+config.add('mode', str, 'cloud', 'MODE', description='Runtime mode: "desktop" or "cloud".')
+
+# ---------------------------------------------------------------------------
 # Chat
 # ---------------------------------------------------------------------------
 config.add('mount_base_dir', str, '/data', 'MOUNT_BASE_DIR', description='Base directory for mounted files.')

@@ -1,5 +1,5 @@
 # Code style: Python (flake8) + Go (gofmt). Mirrors algorithm/lazyllm Makefile pattern.
-.PHONY: help lint install-flake8 lint-python lint-go test build up up-build down clear reset-kb reset-all fresh-start file-watcher-dirs file-watcher-build file-watcher-run file-watcher-start file-watcher-stop
+.PHONY: help lint install-flake8 lint-python lint-go test build up up-build down clear reset-kb reset-all fresh-start file-watcher-dirs file-watcher-build file-watcher-run file-watcher-start file-watcher-stop windows-desktop
 .DEFAULT_GOAL := help
 
 # Use legacy Docker builder by default to avoid pulling moby/buildkit:buildx-stable-1 from Docker Hub
@@ -468,3 +468,41 @@ reset-all: reset-kb
 fresh-start: reset-kb
 	@echo "🚀 Rebuilding images and starting services with LAZYMIND_RESET_ALGO_ON_STARTUP=true..."
 	@$(MAKE) --no-print-directory up-build LAZYMIND_RESET_ALGO_ON_STARTUP=true
+
+# ---------------------------------------------------------------------------
+# windows-desktop: Build self-contained Windows Desktop runtime to ~/LazyMind/
+#
+# Prerequisites: Node.js, pnpm, Go 1.24+
+# Output: ~/LazyMind/ with LazyMind.exe launcher, Electron, frontend, core binary
+# ---------------------------------------------------------------------------
+LAZYMIND_OUTPUT_DIR ?= $(HOME)/LazyMind
+DESKTOP_DIR := desktop/windows
+
+windows-desktop:
+	@echo "=== LazyMind Windows Desktop Build ==="
+	@echo "Output: $(LAZYMIND_OUTPUT_DIR)"
+	@echo ""
+	@echo "[1/7] Terminating old processes..."
+	-@powershell -NoProfile -Command "Get-Process -Name 'LazyMind','electron','core' -ErrorAction SilentlyContinue | Stop-Process -Force" 2>/dev/null || true
+	@echo "[2/7] Cleaning old output directory..."
+	@rm -rf "$(LAZYMIND_OUTPUT_DIR)"
+	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin" "$(LAZYMIND_OUTPUT_DIR)/electron" "$(LAZYMIND_OUTPUT_DIR)/app" "$(LAZYMIND_OUTPUT_DIR)/renderer" "$(LAZYMIND_OUTPUT_DIR)/data" "$(LAZYMIND_OUTPUT_DIR)/logs" "$(LAZYMIND_OUTPUT_DIR)/resources"
+	@echo "[3/7] Building frontend..."
+	@cd frontend && pnpm install --frozen-lockfile && pnpm build
+	@cp -r frontend/dist/* "$(LAZYMIND_OUTPUT_DIR)/renderer/"
+	@echo "[4/7] Building Go core..."
+	@cd backend/core && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 $(GO) build -o "$(LAZYMIND_OUTPUT_DIR)/bin/core.exe" ./cmd/dbmigrate
+	@echo "[5/7] Building Electron app..."
+	@cd $(DESKTOP_DIR)/electron && npm install && npm run build
+	@cp -r $(DESKTOP_DIR)/electron/dist/* "$(LAZYMIND_OUTPUT_DIR)/app/"
+	@echo "[6/7] Building LazyMind.exe launcher..."
+	@cd $(DESKTOP_DIR)/cmd/launcher && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -ldflags "-H=windowsgui -s -w" -o "$(LAZYMIND_OUTPUT_DIR)/LazyMind.exe" .
+	@echo "[7/7] Copying resources..."
+	@cp -r $(DESKTOP_DIR)/resources/* "$(LAZYMIND_OUTPUT_DIR)/resources/"
+	@cp $(DESKTOP_DIR)/resources/templates/default_config.yaml "$(LAZYMIND_OUTPUT_DIR)/config.yaml"
+	@echo ""
+	@echo "=== Build complete ==="
+	@echo "Run: $(LAZYMIND_OUTPUT_DIR)/LazyMind.exe"
+	@echo ""
+	@echo "Checking for bad artifacts..."
+	@if [ -f "$(LAZYMIND_OUTPUT_DIR)/nul" ]; then echo "ERROR: found 'nul' file artifact"; rm -f "$(LAZYMIND_OUTPUT_DIR)/nul"; fi

@@ -2,13 +2,15 @@ import axios from "axios";
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from "axios";
 import { message } from "antd";
 import { AgentAppsAuth } from "@/components/auth";
+import { isDesktopMode, getDesktopApiBaseUrl, desktopAutoLogin } from "@/utils/desktop";
 import i18n from "@/i18n";
 
-export const BASE_URL =
-  (typeof import.meta !== "undefined" &&
-    (import.meta as any).env?.VITE_API_BASE_URL) ||
-  (typeof window !== "undefined" && window.location.origin) ||
-  "";
+export const BASE_URL = isDesktopMode()
+  ? getDesktopApiBaseUrl()
+  : (typeof import.meta !== "undefined" &&
+      (import.meta as any).env?.VITE_API_BASE_URL) ||
+    (typeof window !== "undefined" && window.location.origin) ||
+    "";
 
 const axiosInstance: AxiosInstance = axios.create({
   timeout: 30000,
@@ -192,6 +194,19 @@ export const handleError = async (error: AxiosError) => {
       }
       message.error(errMsg || i18n.t("common.accessDenied"));
     } else if (error.response.status === 401) {
+      if (isDesktopMode()) {
+        if (!originalRequest || originalRequest._retry) {
+          return Promise.reject(error);
+        }
+        originalRequest._retry = true;
+        const ok = await desktopAutoLogin();
+        if (ok && originalRequest.headers) {
+          originalRequest.headers.authorization = `Bearer ${AgentAppsAuth.getAccessToken()}`;
+          return axiosInstance(originalRequest);
+        }
+        return Promise.reject(error);
+      }
+
       if (isRefreshEndpoint(originalRequest?.url)) {
         if (AgentAppsAuth.isLoggedIn()) {
           message.warning(i18n.t("auth.sessionExpired"));

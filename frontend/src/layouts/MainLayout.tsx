@@ -35,6 +35,7 @@ import {
   isDeveloperModeActive,
   setDeveloperModeActive,
 } from "@/utils/developerMode";
+import { isDesktopMode, desktopAutoLogin } from "@/utils/desktop";
 import RecordList from "@/modules/chat/components/RecordList";
 import {
   CHAT_RESUME_CONVERSATION_KEY,
@@ -94,6 +95,7 @@ export default function MainLayout() {
   const [profileForm] = Form.useForm<ProfileFormValues>();
 
   const [userInfo, setUserInfo] = useState(() => AgentAppsAuth.getUserInfo());
+  const [desktopReady, setDesktopReady] = useState(!isDesktopMode());
   const isLoggedIn = Boolean(userInfo?.token);
   const userName = userInfo?.username || "";
   const isAdminUser = isAdminRole(userInfo?.role);
@@ -192,6 +194,14 @@ export default function MainLayout() {
 
   useEffect(() => {
     setDeveloperActive(isDeveloperModeActive());
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktopMode()) return;
+    desktopAutoLogin().then((ok) => {
+      if (ok) setUserInfo(AgentAppsAuth.getUserInfo());
+      setDesktopReady(true);
+    });
   }, []);
 
   const refreshLayoutUser = useCallback(async () => {
@@ -406,6 +416,7 @@ export default function MainLayout() {
   };
 
   const handleLogout = () => {
+    if (isDesktopMode()) return;
     AgentAppsAuth.logout(
       `${window.location.origin}${window.BASENAME || ""}/login`,
     );
@@ -595,8 +606,12 @@ export default function MainLayout() {
     }
   };
 
-  if (!isLoggedIn) {
+  if (!isLoggedIn && !isDesktopMode()) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!desktopReady) {
+    return null;
   }
 
   return (

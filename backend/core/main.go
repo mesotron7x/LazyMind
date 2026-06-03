@@ -133,7 +133,13 @@ func main() {
 	log.Logger.Info().Str("driver", driver).Msg("ACL store initialized")
 
 	// text/PrompttextInitialize（DB + Redis）。DB text ACL text；Redis textConversationtext/text/text。
-	store.Init(db.DB, readonlyDB.DB, store.MustRedisFromEnv())
+	stateBackend := os.Getenv("LAZYMIND_STATE_BACKEND")
+	if stateBackend == "memory" {
+		store.Init(db.DB, readonlyDB.DB, nil)
+		log.Logger.Info().Msg("Redis disabled (LAZYMIND_STATE_BACKEND=memory)")
+	} else {
+		store.Init(db.DB, readonlyDB.DB, store.MustRedisFromEnv())
+	}
 	evalset.RegisterAsyncJobs()
 	asyncConfig := evalset.LoadAsyncJobRuntimeConfigFromEnv()
 	asyncjob.Start(context.Background(), store.DB(), asyncjob.Options{
@@ -193,8 +199,15 @@ func main() {
 
 	go wordgroup.StartPeriodicVocabExtract(context.Background())
 
-	log.Logger.Info().Msg("Core listening on :8000")
-	if err := http.ListenAndServe(":8000", r); err != nil {
+	serverHost := os.Getenv("SERVER_HOST")
+	serverPort := os.Getenv("SERVER_PORT")
+	if serverPort == "" {
+		serverPort = "8000"
+	}
+	listenAddr := serverHost + ":" + serverPort
+
+	log.Logger.Info().Str("addr", listenAddr).Msg("Core listening")
+	if err := http.ListenAndServe(listenAddr, r); err != nil {
 		log.Logger.Fatal().Err(err).Msg("http listen failed")
 	}
 }

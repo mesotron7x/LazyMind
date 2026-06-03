@@ -53,10 +53,8 @@ def _build_store_config(index_kwargs):
     milvus_uri = _cfg['milvus_uri']
     if not milvus_uri:
         raise ValueError('LAZYMIND_MILVUS_URI is required')
-    opensearch_uri = _cfg['opensearch_uri']
-    if not opensearch_uri:
-        raise ValueError('LAZYMIND_OPENSEARCH_URI is required')
-    return {
+
+    store_conf = {
         'vector_store': {
             'type': 'milvus',
             'kwargs': {
@@ -64,20 +62,28 @@ def _build_store_config(index_kwargs):
                 'index_kwargs': index_kwargs,
             },
         },
-        'segment_store': {
-            'type': 'opensearch',
-            'kwargs': {
-                'uris': opensearch_uri,
-                'client_kwargs': {
-                    'http_compress': True,
-                    'use_ssl': True,
-                    'verify_certs': False,
-                    'user': _cfg['opensearch_user'],
-                    'password': _cfg['opensearch_password'] or 'LazyRAG_OpenSearch123!',
-                },
+    }
+
+    if _cfg['mode'] == 'desktop':
+        return store_conf
+
+    opensearch_uri = _cfg['opensearch_uri']
+    if not opensearch_uri:
+        raise ValueError('LAZYMIND_OPENSEARCH_URI is required')
+    store_conf['segment_store'] = {
+        'type': 'opensearch',
+        'kwargs': {
+            'uris': opensearch_uri,
+            'client_kwargs': {
+                'http_compress': True,
+                'use_ssl': True,
+                'verify_certs': False,
+                'user': _cfg['opensearch_user'],
+                'password': _cfg['opensearch_password'] or 'LazyRAG_OpenSearch123!',
             },
         },
     }
+    return store_conf
 
 
 def _build_pdf_reader():
@@ -121,7 +127,7 @@ def reset_stores() -> None:
     '''
     import re
     from lazyllm import LOG
-    from lazyllm.tools.rag.store import MilvusStore, OpenSearchStore
+    from lazyllm.tools.rag.store import MilvusStore
 
     LOG.warning(f'[build_document] Clearing vector/segment stores for algo "{ALGO_ID}"')
 
@@ -134,7 +140,6 @@ def reset_stores() -> None:
     store_conf = _build_store_config(EMBED_INDEX_KWARGS)
 
     milvus_cfg = (store_conf.get('vector_store') or {}).get('kwargs', {})
-    opensearch_cfg = (store_conf.get('segment_store') or {}).get('kwargs', {})
 
     if milvus_cfg.get('uri'):
         milvus = MilvusStore(**{k: v for k, v in milvus_cfg.items() if k != 'index_kwargs'})
@@ -142,11 +147,14 @@ def reset_stores() -> None:
             milvus.delete(_col(group))
         LOG.warning(f'[build_document] Milvus collections dropped for algo "{ALGO_ID}"')
 
-    if opensearch_cfg.get('uris'):
-        opensearch = OpenSearchStore(**opensearch_cfg)
-        for group in activated_groups:
-            opensearch.delete(_col(group))
-        LOG.warning(f'[build_document] OpenSearch indices dropped for algo "{ALGO_ID}"')
+    if _cfg['mode'] != 'desktop':
+        opensearch_cfg = (store_conf.get('segment_store') or {}).get('kwargs', {})
+        if opensearch_cfg.get('uris'):
+            from lazyllm.tools.rag.store import OpenSearchStore
+            opensearch = OpenSearchStore(**opensearch_cfg)
+            for group in activated_groups:
+                opensearch.delete(_col(group))
+            LOG.warning(f'[build_document] OpenSearch indices dropped for algo "{ALGO_ID}"')
 
 
 # Backward-compat alias — callers that imported reset_document() still work.
@@ -185,14 +193,21 @@ def drop_lazyllm_tables() -> None:
     if not db_url:
         LOG.warning('[build_document] database_url not set — skipping lazyllm table drop')
         return
-    # Normalise psycopg3 URL to psycopg2 for SQLAlchemy (lazyllm uses psycopg2 internally)
-    sa_url = db_url.replace('postgresql+psycopg://', 'postgresql+psycopg2://', 1)
+    is_sqlite = db_url.startswith('sqlite')
+    if is_sqlite:
+        sa_url = db_url
+    else:
+        sa_url = db_url.replace('postgresql+psycopg://', 'postgresql+psycopg2://', 1)
     try:
         import sqlalchemy
         engine = sqlalchemy.create_engine(sa_url)
-        table_list = ', '.join(f'"{t}"' for t in _LAZYLLM_TABLES)
         with engine.connect() as conn:
-            conn.execute(sqlalchemy.text(f'DROP TABLE IF EXISTS {table_list} CASCADE'))
+            if is_sqlite:
+                for t in _LAZYLLM_TABLES:
+                    conn.execute(sqlalchemy.text(f'DROP TABLE IF EXISTS "{t}"'))
+            else:
+                table_list = ', '.join(f'"{t}"' for t in _LAZYLLM_TABLES)
+                conn.execute(sqlalchemy.text(f'DROP TABLE IF EXISTS {table_list} CASCADE'))
             conn.commit()
         engine.dispose()
         LOG.warning(f'[build_document] Dropped {len(_LAZYLLM_TABLES)} lazyllm tables — will be recreated on startup')

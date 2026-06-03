@@ -1,0 +1,27 @@
+app:
+  mode: desktop
+  version: "0.1.0"
+
+proxy:
+  port: 5023
+
+services:
+  core:
+    port: 8001
+  auth:
+    port: 8002
+  chat:
+    port: 8046
+  parsing:
+    port: 8047
+  processor:
+    port: 8048
+  docService:
+    port: 8049
+  scan:
+    port: 18080
+  fileWatcher:
+    port: 18081
+
+model:
+  provider: mock

@@ -40,6 +40,11 @@ func Connect(driver, dsn string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	if driver == DriverSQLite {
+		if err := configureSQLite(db); err != nil {
+			return nil, fmt.Errorf("configure sqlite pragmas: %w", err)
+		}
+	}
 	return &DB{DB: db}, nil
 }
 
@@ -50,4 +55,23 @@ func MustConnect(driver, dsn string) *DB {
 		log.Logger.Fatal().Err(err).Str("driver", driver).Msg("orm: connect failed")
 	}
 	return db
+}
+
+func configureSQLite(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA foreign_keys=ON",
+		"PRAGMA synchronous=NORMAL",
+	}
+	for _, p := range pragmas {
+		if _, err := sqlDB.Exec(p); err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+	}
+	return nil
 }

@@ -1,0 +1,33 @@
+agent_id: "file-watcher-desktop"
+tenant_id: "desktop-tenant"
+agent_token: ""
+listen_addr: "127.0.0.1:18081"
+advertise_addr: "http://127.0.0.1:18081"
+control_plane_base_url: "http://127.0.0.1:18080"
+heartbeat_interval: "30s"
+pull_interval: "20s"
+reconcile_interval: "20m"
+base_root: "${LAZYMIND_DATA_DIR}/scan"
+host_path_style: "windows"
+log_level: "info"
+
+watch:
+  debounce_window: "10s"
+  max_batch_size: 512
+  recursive: true
+
+scan:
+  batch_size: 1000
+  max_concurrency: 2
+  large_file_threshold_mb: 200
+
+security:
+  allowed_roots:
+    - "C:\\"
+    - "D:\\"
+    - "E:\\"
+    - "F:\\"
+
+http:
+  read_timeout: "10s"
+  write_timeout: "30s"

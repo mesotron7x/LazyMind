@@ -7,8 +7,9 @@ import {
   CompleteUploadResponse,
   UploadPartResponse,
 } from "@/api/generated/core-client";
+import { isDesktopMode, getDesktopApiBaseUrl } from "@/utils/desktop";
 
-const BASE_URL = import.meta.env.VITE_BASE_URL || "";
+const BASE_URL = isDesktopMode() ? getDesktopApiBaseUrl() : (import.meta.env.VITE_BASE_URL || "");
 const coreApiBaseUrl = `${BASE_URL}/api/core`;
 
 const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024;
