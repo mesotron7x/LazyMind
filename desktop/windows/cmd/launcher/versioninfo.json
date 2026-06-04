@@ -2,7 +2,7 @@
   "FixedFileInfo": {
     "FileVersion": {"Major": 0, "Minor": 1, "Patch": 0, "Build": 0},
     "ProductVersion": {"Major": 0, "Minor": 1, "Patch": 0, "Build": 0},
-    "FileType": "App"
+    "FileType": "1"
   },
   "StringFileInfo": {
     "FileDescription": "LazyMind Desktop",

@@ -14,32 +14,37 @@
       -webkit-app-region: drag;
     }
     .container {
+      min-width: 320px;
       text-align: center;
-      background: rgba(255, 255, 255, 0.95);
+      background: rgba(255, 255, 255, 0.96);
       border-radius: 16px;
-      padding: 48px 64px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+      padding: 36px 48px 40px;
+      box-shadow: 0 8px 32px rgba(15, 23, 42, 0.14);
     }
     .logo {
-      font-size: 48px;
-      margin-bottom: 16px;
+      display: block;
+      width: 132px;
+      height: 132px;
+      object-fit: contain;
+      margin: 0 auto 18px;
+      -webkit-user-drag: none;
     }
     .title {
       font-size: 24px;
       font-weight: 600;
-      color: #1a1a2e;
+      color: #1f2937;
       margin-bottom: 8px;
     }
     .subtitle {
       font-size: 14px;
-      color: #6b7280;
+      color: #64748b;
       margin-bottom: 24px;
     }
     .spinner {
       width: 32px;
       height: 32px;
       border: 3px solid #e5e7eb;
-      border-top-color: #6366f1;
+      border-top-color: #2563eb;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
       margin: 0 auto;
@@ -51,9 +56,9 @@
 </head>
 <body>
   <div class="container">
-    <div class="logo">🐱</div>
+    <img class="logo" src="icons/icon.png" alt="LazyMind">
     <div class="title">LazyMind</div>
-    <div class="subtitle">正在启动本地服务…</div>
+    <div class="subtitle">正在启动本地服务...</div>
     <div class="spinner"></div>
   </div>
 </body>

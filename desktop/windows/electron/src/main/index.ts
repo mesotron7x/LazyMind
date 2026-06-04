@@ -18,6 +18,10 @@ let assistantManager: AssistantManager | null = null;
 
 registerSchemeAsPrivileged();
 
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.lazymind.desktop');
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();

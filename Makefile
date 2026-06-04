@@ -564,22 +564,22 @@ windows-desktop:
 	@echo "=== LazyMind Windows Desktop Build ==="
 	@echo "Output: $(LAZYMIND_OUTPUT_DIR)"
 	@echo ""
-	@echo "[1/7] Terminating old processes..."
+	@echo "[1/8] Terminating old processes..."
 	-@powershell -NoProfile -Command "Get-Process -Name 'LazyMind','electron','core' -ErrorAction SilentlyContinue | Stop-Process -Force" 2>/dev/null || true
-	@echo "[2/7] Cleaning old output directory..."
+	@echo "[2/8] Cleaning old output directory..."
 	@rm -rf "$(LAZYMIND_OUTPUT_DIR)"
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin" "$(LAZYMIND_OUTPUT_DIR)/electron" "$(LAZYMIND_OUTPUT_DIR)/app" "$(LAZYMIND_OUTPUT_DIR)/renderer" "$(LAZYMIND_OUTPUT_DIR)/data" "$(LAZYMIND_OUTPUT_DIR)/logs" "$(LAZYMIND_OUTPUT_DIR)/resources"
-	@echo "[3/7] Building frontend..."
+	@echo "[3/8] Building frontend..."
 	@cd frontend && pnpm install --frozen-lockfile && pnpm build
 	@cp -r frontend/dist/* "$(LAZYMIND_OUTPUT_DIR)/renderer/"
-	@echo "[4/7] Building Go core..."
+	@echo "[4/8] Building Go core..."
 	@cd backend/core && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(LAZYMIND_OUTPUT_DIR)/bin/core.exe" .
 	@cp -r backend/core/migrations "$(LAZYMIND_OUTPUT_DIR)/bin/migrations"
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/config"
 	@cp backend/core/config/model_catalog.yaml "$(LAZYMIND_OUTPUT_DIR)/bin/config/model_catalog.yaml"
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/auth-service"
 	@cd $(DESKTOP_DIR)/cmd/auth-service && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(abspath $(LAZYMIND_OUTPUT_DIR))/bin/auth-service/auth-service.exe" .
-	@echo "[5/7] Building Electron app..."
+	@echo "[5/8] Building Electron app..."
 	@mkdir -p "$(ELECTRON_CACHE_DIR)"
 	@cd $(DESKTOP_DIR)/electron && npm install $(NPM_REGISTRY_FLAGS) && npm_config_platform=win32 npm_config_arch=x64 electron_config_cache=".electron-cache" force_no_cache=true node node_modules/electron/install.js && npm run build
 	@if [ ! -f "$(DESKTOP_DIR)/electron/node_modules/electron/dist/electron.exe" ]; then \
@@ -600,9 +600,11 @@ windows-desktop:
 	@cp -r $(DESKTOP_DIR)/electron/dist/* "$(LAZYMIND_OUTPUT_DIR)/app/"
 	@cp $(DESKTOP_DIR)/electron/package.runtime.json "$(LAZYMIND_OUTPUT_DIR)/app/package.json"
 	@cd "$(LAZYMIND_OUTPUT_DIR)/app" && npm install --omit=dev --ignore-scripts --no-audit --no-fund $(NPM_REGISTRY_FLAGS)
-	@echo "[6/7] Building LazyMind.exe launcher..."
-	@cd $(DESKTOP_DIR)/cmd/launcher && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -ldflags "-H=windowsgui -s -w" -o "$(LAZYMIND_OUTPUT_DIR)/LazyMind.exe" .
-	@echo "[7/7] Copying resources..."
+	@echo "[6/8] Generating desktop icons..."
+	@powershell -NoProfile -ExecutionPolicy Bypass -File "$(DESKTOP_DIR)/../../scripts/windows/generate-desktop-icons.ps1"
+	@echo "[7/8] Building LazyMind.exe launcher..."
+	@cd $(DESKTOP_DIR)/cmd/launcher && $(GO) generate && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -ldflags "-H=windowsgui -s -w" -o "$(LAZYMIND_OUTPUT_DIR)/LazyMind.exe" .
+	@echo "[8/8] Copying resources..."
 	@cp -r $(DESKTOP_DIR)/resources/* "$(LAZYMIND_OUTPUT_DIR)/resources/"
 	@cp $(DESKTOP_DIR)/resources/templates/default_config.yaml "$(LAZYMIND_OUTPUT_DIR)/config.yaml"
 	@echo "Checking for bad artifacts..."
