@@ -21,6 +21,9 @@ const api: LazyMindDesktopAPI = {
   getCurrentAssistant: () => ipcRenderer.invoke('assistant:getCurrent'),
   setCurrentAssistant: (id) => ipcRenderer.invoke('assistant:setCurrent', id),
   getAssistantList: () => ipcRenderer.invoke('assistant:getList'),
+  createAssistant: (data) => ipcRenderer.invoke('assistant:create', data),
+  updateAssistant: (id, data) => ipcRenderer.invoke('assistant:update', id, data),
+  deleteAssistant: (id) => ipcRenderer.invoke('assistant:delete', id),
   onAssistantChange: (callback) => {
     const handler = (_: unknown, assistant: unknown) => callback(assistant as any);
     ipcRenderer.on('assistant:changed', handler);

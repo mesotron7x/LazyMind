@@ -66,10 +66,15 @@
 }
 
 .assistant-management-meta {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.assistant-management-actions {
+  flex: 0 0 auto;
 }
 
 .assistant-management-name,
@@ -108,5 +113,13 @@
   .assistant-management-toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .assistant-management-item-header {
+    align-items: flex-start;
+  }
+
+  .assistant-management-actions {
+    margin-left: auto;
   }
 }

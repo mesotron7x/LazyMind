@@ -24,6 +24,18 @@ declare global {
       getCurrentAssistant(): Promise<any>;
       setCurrentAssistant(id: string): Promise<void>;
       getAssistantList(): Promise<any[]>;
+      createAssistant(data: {
+        username: string;
+        displayName: string;
+        avatar: string;
+        description: string;
+      }): Promise<any>;
+      updateAssistant(id: string, data: {
+        displayName?: string;
+        avatar?: string;
+        description?: string;
+      }): Promise<any>;
+      deleteAssistant(id: string): Promise<void>;
       onAssistantChange(callback: (assistant: any) => void): () => void;
       getVersion(): Promise<string>;
       isPackaged(): Promise<boolean>;

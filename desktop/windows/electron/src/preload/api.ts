@@ -1,4 +1,10 @@
-import { DataDirPaths, ServiceStatus, AssistantInfo } from '../shared/types';
+import {
+  DataDirPaths,
+  ServiceStatus,
+  AssistantInfo,
+  CreateAssistantData,
+  UpdateAssistantData,
+} from '../shared/types';
 
 export interface LazyMindDesktopAPI {
   getDataDir(): Promise<DataDirPaths>;
@@ -12,6 +18,9 @@ export interface LazyMindDesktopAPI {
   getCurrentAssistant(): Promise<AssistantInfo | null>;
   setCurrentAssistant(id: string): Promise<void>;
   getAssistantList(): Promise<AssistantInfo[]>;
+  createAssistant(data: CreateAssistantData): Promise<AssistantInfo>;
+  updateAssistant(id: string, data: UpdateAssistantData): Promise<AssistantInfo>;
+  deleteAssistant(id: string): Promise<void>;
   onAssistantChange(callback: (assistant: AssistantInfo) => void): () => void;
   getVersion(): Promise<string>;
   isPackaged(): Promise<boolean>;

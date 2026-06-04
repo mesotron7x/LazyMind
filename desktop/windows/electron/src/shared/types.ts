@@ -35,6 +35,19 @@ export interface AssistantInfo {
   createdAt: string;
 }
 
+export interface CreateAssistantData {
+  username: string;
+  displayName: string;
+  avatar: string;
+  description: string;
+}
+
+export interface UpdateAssistantData {
+  displayName?: string;
+  avatar?: string;
+  description?: string;
+}
+
 export interface LazyMindDesktopAPI {
   getDataDir(): Promise<DataDirPaths>;
   pickFolder(options?: { title?: string }): Promise<string | null>;
@@ -47,6 +60,9 @@ export interface LazyMindDesktopAPI {
   getCurrentAssistant(): Promise<AssistantInfo | null>;
   setCurrentAssistant(id: string): Promise<void>;
   getAssistantList(): Promise<AssistantInfo[]>;
+  createAssistant(data: CreateAssistantData): Promise<AssistantInfo>;
+  updateAssistant(id: string, data: UpdateAssistantData): Promise<AssistantInfo>;
+  deleteAssistant(id: string): Promise<void>;
   onAssistantChange(callback: (assistant: AssistantInfo) => void): () => void;
   getVersion(): Promise<string>;
   isPackaged(): Promise<boolean>;

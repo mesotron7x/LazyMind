@@ -2,7 +2,7 @@ import { app, Menu } from 'electron';
 import { registerSchemeAsPrivileged, registerProtocolHandler } from './protocol';
 import { createMainWindow, createSplashWindow } from './window';
 import { ensureDataDir } from './data-dir';
-import { registerAllIPCHandlers, setProcessManagerRef } from './ipc/handlers';
+import { registerAllIPCHandlers, setAssistantManagerRef, setProcessManagerRef } from './ipc/handlers';
 import { initLifecycle } from './lifecycle';
 import { createProcessManager, getProcessConfigs } from './process-manager';
 import { createProxyServer, getDefaultRoutes, generateLocalSecret } from './proxy';
@@ -10,9 +10,11 @@ import { createAssistantManager } from './assistant-manager';
 import { DEFAULT_PORTS, PROTOCOL_SCHEME } from '../shared/constants';
 import type { ProcessManager } from './process-manager';
 import type { ProxyServer } from './proxy';
+import type { AssistantManager } from './assistant-manager';
 
 let processManager: ProcessManager | null = null;
 let proxyServer: ProxyServer | null = null;
+let assistantManager: AssistantManager | null = null;
 
 registerSchemeAsPrivileged();
 
@@ -46,7 +48,8 @@ if (!gotSingleInstanceLock) {
     await proxyServer.start();
 
     const initializeAssistant = async () => {
-      const assistantManager = createAssistantManager(proxyServer!);
+      assistantManager = createAssistantManager(proxyServer!);
+      setAssistantManagerRef(assistantManager);
       await assistantManager.initialize();
     };
 
