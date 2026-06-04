@@ -139,6 +139,10 @@ For environment setup and detailed examples, see [`docs/quick_start.md`](docs/qu
 | PaddleOCR | `make up LAZYMIND_OCR_SERVER_TYPE=paddleocr` |
 | External Milvus/OpenSearch | `make up LAZYMIND_MILVUS_URI=http://your-milvus:19530 LAZYMIND_OPENSEARCH_URI=https://your-opensearch:9200` |
 | Enable store dashboards | `make up LAZYMIND_ENABLE_STORE_DASHBOARDS=1` |
+| Prepare Windows desktop build tools | `make windows-build-tools` |
+| Build Windows desktop runtime | `make windows-desktop LAZYMIND_OUTPUT_DIR="C:/Users/$env:USERNAME/LazyMind"` |
+
+For vanilla Windows setup and desktop build prerequisites, see [`docs/quick_start.md`](docs/quick_start.md#windows-desktop-build-tools).
 
 ---
 

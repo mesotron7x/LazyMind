@@ -7,6 +7,7 @@ import { initLifecycle } from './lifecycle';
 import { createProcessManager, getProcessConfigs } from './process-manager';
 import { createProxyServer, getDefaultRoutes, generateLocalSecret } from './proxy';
 import { createAssistantManager } from './assistant-manager';
+import { isLauncherManagedCore } from './runtime';
 import { DEFAULT_PORTS, PROTOCOL_SCHEME } from '../shared/constants';
 import type { ProcessManager } from './process-manager';
 import type { ProxyServer } from './proxy';
@@ -41,18 +42,24 @@ app.whenReady().then(async () => {
 
   await proxyServer.start();
 
-  const configs = getProcessConfigs();
-  processManager = createProcessManager(configs);
-  setProcessManagerRef(processManager);
-
-  processManager.startAll().then(() => {
+  const initializeAssistant = () => {
     const assistantManager = createAssistantManager(proxyServer!);
     assistantManager.initialize().catch((err) => {
       console.error('Failed to initialize assistant manager:', err);
     });
-  }).catch((err) => {
-    console.error('Failed to start services:', err);
-  });
+  };
+
+  if (isLauncherManagedCore()) {
+    initializeAssistant();
+  } else {
+    const configs = getProcessConfigs();
+    processManager = createProcessManager(configs);
+    setProcessManagerRef(processManager);
+
+    processManager.startAll().then(initializeAssistant).catch((err) => {
+      console.error('Failed to start services:', err);
+    });
+  }
 
   const mainWindow = createMainWindow();
   mainWindow.once('ready-to-show', () => {

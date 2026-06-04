@@ -6,7 +6,7 @@ let mainWindow: BrowserWindow | null = null;
 let pm: ProcessManager | null = null;
 let proxy: ProxyServer | null = null;
 
-export function initLifecycle(win: BrowserWindow, processManager: ProcessManager, proxyServer: ProxyServer): void {
+export function initLifecycle(win: BrowserWindow, processManager: ProcessManager | null, proxyServer: ProxyServer): void {
   mainWindow = win;
   pm = processManager;
   proxy = proxyServer;

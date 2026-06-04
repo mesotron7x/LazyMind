@@ -2,6 +2,7 @@ import { app, protocol, net } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PROTOCOL_SCHEME } from '../shared/constants';
+import { getRendererDir, isPortableRuntime } from './runtime';
 
 export function registerSchemeAsPrivileged(): void {
   protocol.registerSchemesAsPrivileged([
@@ -50,17 +51,9 @@ export function registerProtocolHandler(): void {
 }
 
 export function getRendererURL(route: string = '/'): string {
-  if (!app.isPackaged) {
+  if (!app.isPackaged && !isPortableRuntime()) {
     const devPort = process.env.VITE_DEV_PORT || '5173';
     return `http://localhost:${devPort}${route}`;
   }
   return `${PROTOCOL_SCHEME}://app${route}`;
-}
-
-function getRendererDir(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'renderer');
-  }
-  // Development: expect frontend/dist relative to project root
-  return path.join(__dirname, '../../../../../../frontend/dist');
 }

@@ -14,6 +14,24 @@
 - 如使用公有云 API 模型，请提前准备好对应的 API Key
 - 如使用内网模型，请确保当前机器能访问到内网服务
 
+### Windows 桌面版构建工具链
+
+Windows 桌面版构建需要 Git/MSYS 工具、Node.js 24 LTS、pnpm 10 和 Go 1.25+。在干净的 Windows 环境中，先运行 PowerShell bootstrap 脚本：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/install-build-tools.ps1
+```
+
+如果当前环境已经有 `make`，也可以使用 Make 包装命令：
+
+```powershell
+make windows-build-tools
+make windows-build-tools-check
+make windows-desktop LAZYMIND_OUTPUT_DIR="C:/Users/$env:USERNAME/LazyMind"
+```
+
+运行 `windows-build-tools` 后建议重新打开终端，让更新后的用户 `PATH` 生效。
+
 ## 环境变量
 
 ### 1. 模型配置

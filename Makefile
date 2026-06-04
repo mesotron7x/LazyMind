@@ -1,8 +1,36 @@
 # Code style: Python (flake8) + Go (gofmt). Mirrors algorithm/lazyllm Makefile pattern.
 ifeq ($(OS),Windows_NT)
-SHELL := C:/Program Files/Git/usr/bin/bash.exe
+_WINDOWS_PROGRAM_FILES_GIT_BASH := C:/Program Files/Git/usr/bin/bash.exe
+_WINDOWS_SCOOP_GIT_HOME := $(subst \,/,$(USERPROFILE))/scoop/apps/git/current
+_WINDOWS_SCOOP_GIT_BASH := $(_WINDOWS_SCOOP_GIT_HOME)/usr/bin/bash.exe
+_WINDOWS_SCOOP_GIT_USR_BIN := $(_WINDOWS_SCOOP_GIT_HOME)/usr/bin
+ifneq (,$(wildcard $(_WINDOWS_PROGRAM_FILES_GIT_BASH)))
+SHELL := $(_WINDOWS_PROGRAM_FILES_GIT_BASH)
+else
+ifneq (,$(wildcard $(_WINDOWS_SCOOP_GIT_BASH)))
+SHELL := $(_WINDOWS_SCOOP_GIT_BASH)
+else
+SHELL := bash
 endif
-.PHONY: help lint install-flake8 lint-python lint-go test build up up-build down clear reset-kb reset-all fresh-start file-watcher-dirs file-watcher-build file-watcher-run file-watcher-start file-watcher-stop windows-desktop
+endif
+ifneq (,$(wildcard $(_WINDOWS_SCOOP_GIT_USR_BIN)))
+export PATH := $(_WINDOWS_SCOOP_GIT_USR_BIN):$(PATH)
+endif
+empty :=
+space := $(empty) $(empty)
+_WINDOWS_TOOLCHAIN_ROOT_WIN := $(subst \,/,$(USERPROFILE))/.lazymind/toolchains
+_WINDOWS_TOOLCHAIN_ROOT := $(shell cygpath -u "$(_WINDOWS_TOOLCHAIN_ROOT_WIN)" 2>/dev/null)
+_WINDOWS_NPM_GLOBAL := $(_WINDOWS_TOOLCHAIN_ROOT)/npm-global
+_WINDOWS_NODE_DIRS_WIN := $(wildcard $(_WINDOWS_TOOLCHAIN_ROOT_WIN)/node-v*-win-x64)
+_WINDOWS_GO_BIN_DIRS_WIN := $(wildcard $(_WINDOWS_TOOLCHAIN_ROOT_WIN)/go*/bin)
+_WINDOWS_NODE_DIRS := $(foreach path,$(_WINDOWS_NODE_DIRS_WIN),$(shell cygpath -u "$(path)" 2>/dev/null))
+_WINDOWS_GO_BIN_DIRS := $(foreach path,$(_WINDOWS_GO_BIN_DIRS_WIN),$(shell cygpath -u "$(path)" 2>/dev/null))
+_WINDOWS_TOOLCHAIN_PATH := $(strip $(_WINDOWS_NPM_GLOBAL) $(_WINDOWS_NODE_DIRS) $(_WINDOWS_GO_BIN_DIRS))
+ifneq (,$(_WINDOWS_TOOLCHAIN_PATH))
+export PATH := $(subst $(space),:,$(_WINDOWS_TOOLCHAIN_PATH)):$(PATH)
+endif
+endif
+.PHONY: help lint install-flake8 lint-python lint-go test build up up-build down clear reset-kb reset-all fresh-start file-watcher-dirs file-watcher-build file-watcher-run file-watcher-start file-watcher-stop windows-build-tools windows-build-tools-check windows-desktop
 .DEFAULT_GOAL := help
 
 # Use legacy Docker builder by default to avoid pulling moby/buildkit:buildx-stable-1 from Docker Hub
@@ -37,6 +65,21 @@ _COMPOSE := DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker compose $(if $(COMPOSE_PRO
 # ---------------------------------------------------------------------------
 # Read MIRROR_PROFILE from .env via shell before any include, so that setting
 # MIRROR_PROFILE=intl in .env correctly selects the intl profile file.
+_NO_ENV_TARGETS := help windows-build-tools windows-build-tools-check
+_NON_NO_ENV_GOALS := $(filter-out $(_NO_ENV_TARGETS),$(MAKECMDGOALS))
+ifeq ($(OS),Windows_NT)
+ifeq ($(strip $(MAKECMDGOALS)),)
+_SKIP_MIRROR_ENV := 1
+else
+ifeq ($(strip $(_NON_NO_ENV_GOALS)),)
+_SKIP_MIRROR_ENV := 1
+endif
+endif
+endif
+
+ifeq ($(_SKIP_MIRROR_ENV),1)
+MIRROR_PROFILE ?= cn
+else
 MIRROR_PROFILE ?= $(or $(shell grep -m1 '^MIRROR_PROFILE=' .env 2>/dev/null | cut -d= -f2-),cn)
 _MIRROR_ENV_FILE := .env.mirrors.$(MIRROR_PROFILE)
 ifneq (,$(wildcard $(_MIRROR_ENV_FILE)))
@@ -47,6 +90,7 @@ endif
 ifneq (,$(wildcard .env))
 include .env
 export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env)
+endif
 endif
 
 # ---------------------------------------------------------------------------
@@ -183,6 +227,10 @@ help:
 	@echo "  make file-watcher-stop  - Stop host file-watcher started by Makefile"
 	@echo "  make lint       - Run Python flake8 and Go gofmt checks"
 	@echo "  make test       - Run project test script"
+	@echo "  make windows-build-tools       - Install Windows desktop build tools"
+	@echo "                                   (Git/MSYS tools, Node.js 24 LTS, pnpm 10, Go 1.25+)"
+	@echo "  make windows-build-tools-check - Verify Windows desktop build tools"
+	@echo "  make windows-desktop           - Build self-contained Windows Desktop runtime"
 	@echo "  make clear      - Stop services, remove volumes, clear Python cache"
 	@echo "  make reset-kb   - Stop services, wipe KB data (Milvus, OpenSearch, uploads, lazyllm DB tables)"
 	@echo "                    Set LAZYMIND_RESET_ALGO_ON_STARTUP=true to also clear algo state on next startup"
@@ -473,13 +521,44 @@ fresh-start: reset-kb
 	@$(MAKE) --no-print-directory up-build LAZYMIND_RESET_ALGO_ON_STARTUP=true
 
 # ---------------------------------------------------------------------------
+# windows-build-tools: Install and verify Windows Desktop build prerequisites
+#
+# Vanilla Windows entrypoint when make is not installed yet:
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/install-build-tools.ps1
+#
+# The Make targets use PowerShell directly so they do not depend on Git Bash.
+# ---------------------------------------------------------------------------
+windows-build-tools windows-build-tools-check: SHELL := powershell.exe
+windows-build-tools windows-build-tools-check: .SHELLFLAGS := -NoProfile -ExecutionPolicy Bypass -Command
+
+windows-build-tools:
+ifeq ($(OS),Windows_NT)
+	@& "$(subst \,/,$(CURDIR))/scripts/windows/install-build-tools.ps1" -ToolchainRoot "$(subst \,/,$(USERPROFILE))/.lazymind/toolchains"
+else
+	$(error windows-build-tools is only supported on Windows)
+endif
+
+windows-build-tools-check:
+ifeq ($(OS),Windows_NT)
+	@& "$(subst \,/,$(CURDIR))/scripts/windows/check-build-tools.ps1" -ToolchainRoot "$(subst \,/,$(USERPROFILE))/.lazymind/toolchains"
+else
+	$(error windows-build-tools-check is only supported on Windows)
+endif
+
+# ---------------------------------------------------------------------------
 # windows-desktop: Build self-contained Windows Desktop runtime to ~/LazyMind/
 #
-# Prerequisites: Node.js, pnpm, Go 1.24+
+# Prerequisites: Git/MSYS tools, Node.js 24 LTS, pnpm 10, Go 1.25+
 # Output: ~/LazyMind/ with LazyMind.exe launcher, Electron, frontend, core binary
 # ---------------------------------------------------------------------------
+ifeq ($(OS),Windows_NT)
+LAZYMIND_OUTPUT_DIR ?= $(subst \,/,$(USERPROFILE))/LazyMind
+else
 LAZYMIND_OUTPUT_DIR ?= $(subst \,/,$(HOME))/LazyMind
+endif
 DESKTOP_DIR := desktop/windows
+NPM_REGISTRY_FLAGS := $(if $(NPM_REGISTRY),--registry=$(NPM_REGISTRY))
+ELECTRON_CACHE_DIR := $(DESKTOP_DIR)/electron/.electron-cache
 
 windows-desktop:
 	@echo "=== LazyMind Windows Desktop Build ==="
@@ -499,16 +578,45 @@ windows-desktop:
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/config"
 	@cp backend/core/config/model_catalog.yaml "$(LAZYMIND_OUTPUT_DIR)/bin/config/model_catalog.yaml"
 	@echo "[5/7] Building Electron app..."
-	@cd $(DESKTOP_DIR)/electron && npm install && npm run build
+	@mkdir -p "$(ELECTRON_CACHE_DIR)"
+	@cd $(DESKTOP_DIR)/electron && npm install $(NPM_REGISTRY_FLAGS) && npm_config_platform=win32 npm_config_arch=x64 electron_config_cache=".electron-cache" force_no_cache=true node node_modules/electron/install.js && npm run build
+	@if [ ! -f "$(DESKTOP_DIR)/electron/node_modules/electron/dist/electron.exe" ]; then \
+		echo "Electron postinstall did not extract electron.exe; using Windows Expand-Archive fallback..."; \
+		electron_zip="$$(find "$(ELECTRON_CACHE_DIR)" -name 'electron-v*-win32-x64.zip' | head -n 1)"; \
+		if [ -z "$$electron_zip" ]; then \
+			echo "ERROR: Electron runtime zip was not found under $(ELECTRON_CACHE_DIR)."; \
+			exit 1; \
+		fi; \
+		ELECTRON_ZIP="$$electron_zip" ELECTRON_DIST="$(DESKTOP_DIR)/electron/node_modules/electron/dist" powershell -NoProfile -Command "Remove-Item -LiteralPath \$$env:ELECTRON_DIST -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Path \$$env:ELECTRON_DIST -Force | Out-Null; Expand-Archive -LiteralPath \$$env:ELECTRON_ZIP -DestinationPath \$$env:ELECTRON_DIST -Force"; \
+		printf 'electron.exe' > "$(DESKTOP_DIR)/electron/node_modules/electron/path.txt"; \
+	fi
+	@if [ ! -f "$(DESKTOP_DIR)/electron/node_modules/electron/path.txt" ] || [ ! -f "$(DESKTOP_DIR)/electron/node_modules/electron/dist/electron.exe" ]; then \
+		echo "ERROR: Electron runtime is missing. Check ELECTRON_MIRROR or rerun npm install in $(DESKTOP_DIR)/electron."; \
+		exit 1; \
+	fi
+	@cp -r $(DESKTOP_DIR)/electron/node_modules/electron/dist/* "$(LAZYMIND_OUTPUT_DIR)/electron/"
 	@cp -r $(DESKTOP_DIR)/electron/dist/* "$(LAZYMIND_OUTPUT_DIR)/app/"
+	@cp $(DESKTOP_DIR)/electron/package.runtime.json "$(LAZYMIND_OUTPUT_DIR)/app/package.json"
+	@cd "$(LAZYMIND_OUTPUT_DIR)/app" && npm install --omit=dev --ignore-scripts --no-audit --no-fund $(NPM_REGISTRY_FLAGS)
 	@echo "[6/7] Building LazyMind.exe launcher..."
 	@cd $(DESKTOP_DIR)/cmd/launcher && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -ldflags "-H=windowsgui -s -w" -o "$(LAZYMIND_OUTPUT_DIR)/LazyMind.exe" .
 	@echo "[7/7] Copying resources..."
 	@cp -r $(DESKTOP_DIR)/resources/* "$(LAZYMIND_OUTPUT_DIR)/resources/"
 	@cp $(DESKTOP_DIR)/resources/templates/default_config.yaml "$(LAZYMIND_OUTPUT_DIR)/config.yaml"
+	@echo "Checking for bad artifacts..."
+	@if [ -f "$(LAZYMIND_OUTPUT_DIR)/nul" ]; then echo "ERROR: found 'nul' file artifact"; rm -f "$(LAZYMIND_OUTPUT_DIR)/nul"; fi
+	@echo "Checking required runtime artifacts..."
+	@for artifact in \
+		"$(LAZYMIND_OUTPUT_DIR)/electron/electron.exe" \
+		"$(LAZYMIND_OUTPUT_DIR)/app/package.json" \
+		"$(LAZYMIND_OUTPUT_DIR)/renderer/index.html" \
+		"$(LAZYMIND_OUTPUT_DIR)/bin/core.exe"; do \
+		if [ ! -f "$$artifact" ]; then \
+			echo "ERROR: missing required runtime artifact: $$artifact"; \
+			exit 1; \
+		fi; \
+	done
 	@echo ""
 	@echo "=== Build complete ==="
 	@echo "Run: $(LAZYMIND_OUTPUT_DIR)/LazyMind.exe"
 	@echo ""
-	@echo "Checking for bad artifacts..."
-	@if [ -f "$(LAZYMIND_OUTPUT_DIR)/nul" ]; then echo "ERROR: found 'nul' file artifact"; rm -f "$(LAZYMIND_OUTPUT_DIR)/nul"; fi

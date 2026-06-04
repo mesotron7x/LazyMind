@@ -1,0 +1,10 @@
+{
+  "name": "lazymind-desktop-runtime",
+  "version": "0.1.0",
+  "main": "main/main/index.js",
+  "private": true,
+  "dependencies": {
+    "http-proxy": "^1.18.1",
+    "js-yaml": "^4.1.0"
+  }
+}

@@ -1,6 +1,7 @@
 import { BrowserWindow, screen } from 'electron';
 import path from 'node:path';
 import { getRendererURL } from './protocol';
+import { getResourcesDir } from './runtime';
 import { PROTOCOL_SCHEME } from '../shared/constants';
 
 const PRELOAD_PATH = path.join(__dirname, '../../preload/preload/index.js');
@@ -15,7 +16,7 @@ export function createMainWindow(): BrowserWindow {
     minHeight: 640,
     show: false,
     title: 'LazyMind',
-    icon: path.join(__dirname, '../../../resources/icons/icon.ico'),
+    icon: path.join(getResourcesDir(), 'icons', 'icon.ico'),
     webPreferences: {
       preload: PRELOAD_PATH,
       nodeIntegration: false,
@@ -60,7 +61,7 @@ export function createSplashWindow(): BrowserWindow {
     },
   });
 
-  const splashPath = path.join(__dirname, '../../../resources/splash.html');
+  const splashPath = path.join(getResourcesDir(), 'splash.html');
   splash.loadFile(splashPath);
   splash.show();
   return splash;

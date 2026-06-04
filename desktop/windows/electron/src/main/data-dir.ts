@@ -3,27 +3,31 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { DataDirPaths } from '../shared/types';
 import { DATA_DIR_NAME } from '../shared/constants';
+import { getDesktopRoot, getResourcesDir } from './runtime';
 
 let cachedPaths: DataDirPaths | null = null;
 
 export function getDataDir(): DataDirPaths {
   if (cachedPaths) return cachedPaths;
 
+  const desktopRoot = getDesktopRoot();
   const overrideDir = process.env.LAZYMIND_DATA_DIR;
-  const root = overrideDir || path.join(app.getPath('appData'), DATA_DIR_NAME);
+  const root = overrideDir || (desktopRoot ? path.join(desktopRoot, 'data') : path.join(app.getPath('appData'), DATA_DIR_NAME));
+  const configPath = desktopRoot ? path.join(desktopRoot, 'config.yaml') : path.join(root, 'config.yaml');
+  const logsPath = process.env.LAZYMIND_LOG_DIR || (desktopRoot ? path.join(desktopRoot, 'logs') : path.join(root, 'logs'));
 
   cachedPaths = {
     root,
-    config: path.join(root, 'config.yaml'),
+    config: configPath,
     data: path.join(root, 'data'),
     vector: path.join(root, 'vector', 'milvus-lite'),
     segment: path.join(root, 'segment'),
     uploads: path.join(root, 'uploads'),
     scanned: path.join(root, 'scanned'),
     cache: path.join(root, 'cache'),
-    logs: path.join(root, 'logs'),
-    diagnostics: path.join(root, 'logs', 'diagnostics'),
-    crash: path.join(root, 'logs', 'crash'),
+    logs: logsPath,
+    diagnostics: path.join(logsPath, 'diagnostics'),
+    crash: path.join(logsPath, 'crash'),
     backups: path.join(root, 'backups'),
     defaultDocs: path.join(root, 'default-docs'),
   };
@@ -65,9 +69,7 @@ async function copyDefaultDocs(targetDir: string): Promise<void> {
     // Not initialized yet
   }
 
-  const sourceDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'default-docs')
-    : path.join(__dirname, '../../../resources/default-docs');
+  const sourceDir = path.join(getResourcesDir(), 'default-docs');
 
   try {
     const files = await fs.readdir(sourceDir);
@@ -84,9 +86,7 @@ async function ensureDefaultConfig(configPath: string): Promise<void> {
   try {
     await fs.access(configPath);
   } catch {
-    const templatePath = app.isPackaged
-      ? path.join(process.resourcesPath, 'templates', 'default_config.yaml')
-      : path.join(__dirname, '../../../resources/templates/default_config.yaml');
+    const templatePath = path.join(getResourcesDir(), 'templates', 'default_config.yaml');
 
     try {
       await fs.copyFile(templatePath, configPath);

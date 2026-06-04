@@ -12,12 +12,15 @@ import (
 	"time"
 )
 
+var logPath string
+
 func main() {
 	exePath, err := os.Executable()
 	if err != nil {
 		fatal("cannot determine executable path: " + err.Error())
 	}
 	exeDir := filepath.Dir(exePath)
+	logPath = filepath.Join(exeDir, "logs", "launcher.log")
 
 	setEnv(exeDir)
 
@@ -31,8 +34,6 @@ func main() {
 		killTree(coreProc)
 		fatal("core health check timed out")
 	}
-
-	os.Setenv("ELECTRON_RENDERER_DIR", filepath.Join(exeDir, "renderer"))
 
 	electronExe := filepath.Join(exeDir, "electron", "electron.exe")
 	electronApp := filepath.Join(exeDir, "app")
@@ -49,15 +50,19 @@ func main() {
 
 func setEnv(exeDir string) {
 	envs := map[string]string{
-		"ACL_DB_DRIVER":           "sqlite",
-		"ACL_DB_DSN":              filepath.Join(exeDir, "data", "auth.db"),
-		"LAZYMIND_STATE_BACKEND":  "memory",
-		"LAZYMIND_MODE":           "desktop",
-		"LAZYMIND_JWT_SECRET":     "lazymind-desktop-local-dev",
-		"SERVER_PORT":             "8001",
-		"SERVER_HOST":             "127.0.0.1",
-		"LAZYMIND_DATA_DIR":       filepath.Join(exeDir, "data"),
-		"LAZYMIND_LOG_DIR":        filepath.Join(exeDir, "logs"),
+		"ACL_DB_DRIVER":                  "sqlite",
+		"ACL_DB_DSN":                     filepath.Join(exeDir, "data", "auth.db"),
+		"ELECTRON_RENDERER_DIR":          filepath.Join(exeDir, "renderer"),
+		"LAZYMIND_DESKTOP_ROOT":          exeDir,
+		"LAZYMIND_LAUNCHER_MANAGED_CORE": "1",
+		"LAZYMIND_STATE_BACKEND":         "memory",
+		"LAZYMIND_MODE":                  "desktop",
+		"LAZYMIND_JWT_SECRET":            "lazymind-desktop-local-dev",
+		"SERVER_PORT":                    "8001",
+		"SERVER_HOST":                    "127.0.0.1",
+		"LAZYMIND_DATA_DIR":              filepath.Join(exeDir, "data"),
+		"LAZYMIND_LOG_DIR":               filepath.Join(exeDir, "logs"),
+		"MIGRATIONS_DIR":                 filepath.Join(exeDir, "bin", "migrations", "sqlite"),
 	}
 	for k, v := range envs {
 		os.Setenv(k, v)
@@ -105,6 +110,14 @@ func killTree(proc *os.Process) {
 }
 
 func fatal(msg string) {
-	fmt.Fprintf(os.Stderr, "LazyMind launcher: %s\n", msg)
+	line := fmt.Sprintf("LazyMind launcher: %s\n", msg)
+	fmt.Fprint(os.Stderr, line)
+	if logPath != "" {
+		_ = os.MkdirAll(filepath.Dir(logPath), 0755)
+		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+			defer f.Close()
+			_, _ = f.WriteString(time.Now().Format(time.RFC3339) + " " + line)
+		}
+	}
 	os.Exit(1)
 }

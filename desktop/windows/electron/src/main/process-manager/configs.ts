@@ -2,10 +2,17 @@ import { app } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { getDataDir } from '../data-dir';
+import { getDesktopRoot, isPortableRuntime } from '../runtime';
 import { DEFAULT_PORTS } from '../../shared/constants';
 import type { ProcessConfig } from './types';
 
+function isDesktopRuntime(): boolean {
+  return app.isPackaged || isPortableRuntime();
+}
+
 function getBinDir(): string {
+  const desktopRoot = getDesktopRoot();
+  if (desktopRoot) return path.join(desktopRoot, 'bin');
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'bin');
   }
@@ -13,20 +20,17 @@ function getBinDir(): string {
 }
 
 function getAlgorithmDir(): string {
+  const desktopRoot = getDesktopRoot();
+  if (desktopRoot) return path.join(desktopRoot, 'algorithm');
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'algorithm');
   }
   return path.resolve(__dirname, '../../../../../algorithm');
 }
 
-function getResourcesDir(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'resources');
-  }
-  return path.resolve(__dirname, '../../../../../desktop/windows/resources');
-}
-
 function getPythonExecutable(): string {
+  const desktopRoot = getDesktopRoot();
+  if (desktopRoot) return path.join(desktopRoot, 'python', 'python.exe');
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'python', 'python.exe');
   }
@@ -146,15 +150,16 @@ export function getProcessConfigs(): ProcessConfig[] {
   const binDir = getBinDir();
   const algorithmDir = getAlgorithmDir();
   const pythonExe = getPythonExecutable();
+  const desktopRuntime = isDesktopRuntime();
   const { scanConfig, fileWatcherConfig } = ensureDesktopConfigs(dataDir);
 
   const configs: ProcessConfig[] = [
     {
       name: 'auth-service',
-      executablePath: app.isPackaged
+      executablePath: desktopRuntime
         ? path.join(binDir, 'auth-service', 'auth-service.exe')
         : pythonExe,
-      args: app.isPackaged
+      args: desktopRuntime
         ? []
         : ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(DEFAULT_PORTS.auth)],
       env: {
@@ -166,7 +171,7 @@ export function getProcessConfigs(): ProcessConfig[] {
         SERVER_HOST: '127.0.0.1',
         SERVER_PORT: String(DEFAULT_PORTS.auth),
       },
-      cwd: app.isPackaged
+      cwd: desktopRuntime
         ? path.join(binDir, 'auth-service')
         : path.join(binDir, 'auth-service'),
       port: DEFAULT_PORTS.auth,
@@ -184,7 +189,7 @@ export function getProcessConfigs(): ProcessConfig[] {
     },
     {
       name: 'core',
-      executablePath: app.isPackaged
+      executablePath: desktopRuntime
         ? path.join(binDir, 'core.exe')
         : path.join(binDir, 'core', 'core.exe'),
       args: [],
@@ -199,13 +204,13 @@ export function getProcessConfigs(): ProcessConfig[] {
         LAZYMIND_CHAT_SERVICE_URL: `http://127.0.0.1:${DEFAULT_PORTS.chat}`,
         LAZYMIND_AUTH_SERVICE_URL: `http://127.0.0.1:${DEFAULT_PORTS.auth}/api/authservice`,
         LAZYMIND_SCAN_CONTROL_PLANE_URL: `http://127.0.0.1:${DEFAULT_PORTS.scan}`,
-        MIGRATIONS_DIR: app.isPackaged
+        MIGRATIONS_DIR: desktopRuntime
           ? path.join(binDir, 'migrations', 'sqlite')
           : path.join(binDir, 'core', 'migrations', 'sqlite'),
         SERVER_PORT: String(DEFAULT_PORTS.core),
         SERVER_HOST: '127.0.0.1',
       },
-      cwd: app.isPackaged ? binDir : path.join(binDir, 'core'),
+      cwd: desktopRuntime ? binDir : path.join(binDir, 'core'),
       port: DEFAULT_PORTS.core,
       healthCheck: {
         type: 'http',
@@ -221,14 +226,14 @@ export function getProcessConfigs(): ProcessConfig[] {
     },
     {
       name: 'scan-control-plane',
-      executablePath: app.isPackaged
+      executablePath: desktopRuntime
         ? path.join(binDir, 'scan-control-plane.exe')
         : path.join(binDir, 'scan-control-plane', 'cmd', 'scan-control-plane.exe'),
       args: ['--config', scanConfig],
       env: {
         LAZYMIND_MODE: 'desktop',
       },
-      cwd: app.isPackaged
+      cwd: desktopRuntime
         ? binDir
         : path.join(binDir, 'scan-control-plane'),
       port: DEFAULT_PORTS.scan,
@@ -246,7 +251,7 @@ export function getProcessConfigs(): ProcessConfig[] {
     },
     {
       name: 'file-watcher',
-      executablePath: app.isPackaged
+      executablePath: desktopRuntime
         ? path.join(binDir, 'file-watcher.exe')
         : path.join(binDir, 'file-watcher', 'cmd', 'file-watcher.exe'),
       args: ['--config', fileWatcherConfig],
@@ -254,7 +259,7 @@ export function getProcessConfigs(): ProcessConfig[] {
         LAZYMIND_MODE: 'desktop',
         LAZYMIND_DATA_DIR: dataDir.data,
       },
-      cwd: app.isPackaged
+      cwd: desktopRuntime
         ? binDir
         : path.join(binDir, 'file-watcher'),
       port: DEFAULT_PORTS.fileWatcher,
@@ -272,10 +277,10 @@ export function getProcessConfigs(): ProcessConfig[] {
     },
     {
       name: 'chat',
-      executablePath: app.isPackaged
+      executablePath: desktopRuntime
         ? path.join(algorithmDir, 'chat', 'chat.exe')
         : pythonExe,
-      args: app.isPackaged
+      args: desktopRuntime
         ? []
         : ['-m', 'chat.app.chat', '--host', '127.0.0.1', '--port', String(DEFAULT_PORTS.chat)],
       env: {
@@ -293,7 +298,7 @@ export function getProcessConfigs(): ProcessConfig[] {
         LAZYMIND_RAG_MODE: 'true',
         LAZYMIND_OCR_SERVER_TYPE: 'none',
       },
-      cwd: app.isPackaged
+      cwd: desktopRuntime
         ? path.join(algorithmDir, 'chat')
         : algorithmDir,
       port: DEFAULT_PORTS.chat,
@@ -311,10 +316,10 @@ export function getProcessConfigs(): ProcessConfig[] {
     },
     {
       name: 'parsing',
-      executablePath: app.isPackaged
+      executablePath: desktopRuntime
         ? path.join(algorithmDir, 'parsing', 'parsing.exe')
         : pythonExe,
-      args: app.isPackaged
+      args: desktopRuntime
         ? []
         : ['-m', 'parsing.parsing', '--host', '127.0.0.1', '--port', String(DEFAULT_PORTS.parsing)],
       env: {
@@ -328,7 +333,7 @@ export function getProcessConfigs(): ProcessConfig[] {
         LAZYMIND_CORE_API_URL: `http://127.0.0.1:${DEFAULT_PORTS.core}`,
         LAZYMIND_CORE_SERVICE_URL: `http://127.0.0.1:${DEFAULT_PORTS.core}`,
       },
-      cwd: app.isPackaged
+      cwd: desktopRuntime
         ? path.join(algorithmDir, 'parsing')
         : algorithmDir,
       port: DEFAULT_PORTS.parsing,
@@ -346,10 +351,10 @@ export function getProcessConfigs(): ProcessConfig[] {
     },
     {
       name: 'processor',
-      executablePath: app.isPackaged
+      executablePath: desktopRuntime
         ? path.join(algorithmDir, 'processor', 'processor.exe')
         : pythonExe,
-      args: app.isPackaged
+      args: desktopRuntime
         ? []
         : ['-m', 'processor.main', '--host', '127.0.0.1', '--port', String(DEFAULT_PORTS.processor)],
       env: {
@@ -363,7 +368,7 @@ export function getProcessConfigs(): ProcessConfig[] {
         LAZYMIND_CORE_API_URL: `http://127.0.0.1:${DEFAULT_PORTS.core}`,
         LAZYMIND_CORE_SERVICE_URL: `http://127.0.0.1:${DEFAULT_PORTS.core}`,
       },
-      cwd: app.isPackaged
+      cwd: desktopRuntime
         ? path.join(algorithmDir, 'processor')
         : algorithmDir,
       port: DEFAULT_PORTS.processor,

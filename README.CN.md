@@ -140,6 +140,10 @@ make up-build LAZYMIND_OCR_SERVER_TYPE=mineru LAZYMIND_OCR_SERVICE_VARIANT=onlin
 | 启用 PaddleOCR  | `make up LAZYMIND_OCR_SERVER_TYPE=paddleocr` |
 | 外接 Milvus/OpenSearch | `make up LAZYMIND_MILVUS_URI=http://your-milvus:19530 LAZYMIND_OPENSEARCH_URI=https://your-opensearch:9200` |
 | 开启存储 Dashboard | `make up LAZYMIND_ENABLE_STORE_DASHBOARDS=1` |
+| 准备 Windows 桌面版构建工具链 | `make windows-build-tools` |
+| 构建 Windows 桌面版运行目录 | `make windows-desktop LAZYMIND_OUTPUT_DIR="C:/Users/$env:USERNAME/LazyMind"` |
+
+干净 Windows 环境的安装入口和桌面版构建前置条件见 [`docs/quick_start.CN.md`](docs/quick_start.CN.md#windows-桌面版构建工具链)。
 
 ---
 

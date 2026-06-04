@@ -14,6 +14,24 @@ All commands are run from the repository root by default.
 - If using a public cloud API model, have the corresponding API key ready
 - If using an on-premises model, ensure the current machine can reach the internal service
 
+### Windows desktop build tools
+
+The Windows desktop build uses Git/MSYS tools, Node.js 24 LTS, pnpm 10, and Go 1.25+. On a vanilla Windows machine, run the PowerShell bootstrap script first:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/install-build-tools.ps1
+```
+
+If `make` is already available, you can use the Make wrapper instead:
+
+```powershell
+make windows-build-tools
+make windows-build-tools-check
+make windows-desktop LAZYMIND_OUTPUT_DIR="C:/Users/$env:USERNAME/LazyMind"
+```
+
+Open a new terminal after `windows-build-tools` so the updated user `PATH` is picked up.
+
 ## Environment Variables
 
 ### 1. Model configuration
