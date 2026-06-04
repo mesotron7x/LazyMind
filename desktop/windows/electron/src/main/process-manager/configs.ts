@@ -30,11 +30,31 @@ function getAlgorithmDir(): string {
 
 function getPythonExecutable(): string {
   const desktopRoot = getDesktopRoot();
-  if (desktopRoot) return path.join(desktopRoot, 'python', 'python.exe');
+  if (desktopRoot) {
+    const bundledPython = path.join(desktopRoot, 'python', 'python.exe');
+    if (fs.existsSync(bundledPython)) return bundledPython;
+    return 'python';
+  }
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'python', 'python.exe');
   }
   return 'python';
+}
+
+function fileExists(filePath: string): boolean {
+  try {
+    return fs.existsSync(filePath);
+  } catch {
+    return false;
+  }
+}
+
+function dirExists(dirPath: string): boolean {
+  try {
+    return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 function ensureDesktopConfigs(dataDir: { root: string; data: string; logs: string }): {
@@ -152,14 +172,17 @@ export function getProcessConfigs(): ProcessConfig[] {
   const pythonExe = getPythonExecutable();
   const desktopRuntime = isDesktopRuntime();
   const { scanConfig, fileWatcherConfig } = ensureDesktopConfigs(dataDir);
+  const authServiceDir = path.join(binDir, 'auth-service');
+  const authServiceExe = path.join(authServiceDir, 'auth-service.exe');
+  const authServiceUsesExe = desktopRuntime && fileExists(authServiceExe);
 
   const configs: ProcessConfig[] = [
     {
       name: 'auth-service',
-      executablePath: desktopRuntime
-        ? path.join(binDir, 'auth-service', 'auth-service.exe')
+      executablePath: authServiceUsesExe
+        ? authServiceExe
         : pythonExe,
-      args: desktopRuntime
+      args: authServiceUsesExe
         ? []
         : ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(DEFAULT_PORTS.auth)],
       env: {
@@ -171,9 +194,7 @@ export function getProcessConfigs(): ProcessConfig[] {
         SERVER_HOST: '127.0.0.1',
         SERVER_PORT: String(DEFAULT_PORTS.auth),
       },
-      cwd: desktopRuntime
-        ? path.join(binDir, 'auth-service')
-        : path.join(binDir, 'auth-service'),
+      cwd: authServiceDir,
       port: DEFAULT_PORTS.auth,
       healthCheck: {
         type: 'http',
@@ -224,6 +245,9 @@ export function getProcessConfigs(): ProcessConfig[] {
       restartPolicy: 'on-failure',
       maxRestarts: 3,
     },
+  ];
+
+  const optionalConfigs: ProcessConfig[] = [
     {
       name: 'scan-control-plane',
       executablePath: desktopRuntime
@@ -386,5 +410,14 @@ export function getProcessConfigs(): ProcessConfig[] {
     },
   ];
 
-  return configs;
+  const availableOptionalConfigs = optionalConfigs.filter((config) => {
+    if (desktopRuntime && !fileExists(config.executablePath)) return false;
+    if (!desktopRuntime && config.cwd && !dirExists(config.cwd)) return false;
+    return true;
+  });
+  const availableNames = new Set(configs.concat(availableOptionalConfigs).map((config) => config.name));
+
+  return configs.concat(availableOptionalConfigs.filter((config) => (
+    config.dependsOn || []
+  ).every((dependency) => availableNames.has(dependency))));
 }

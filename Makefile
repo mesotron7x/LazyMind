@@ -577,6 +577,8 @@ windows-desktop:
 	@cp -r backend/core/migrations "$(LAZYMIND_OUTPUT_DIR)/bin/migrations"
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/config"
 	@cp backend/core/config/model_catalog.yaml "$(LAZYMIND_OUTPUT_DIR)/bin/config/model_catalog.yaml"
+	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/auth-service"
+	@cd $(DESKTOP_DIR)/cmd/auth-service && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(abspath $(LAZYMIND_OUTPUT_DIR))/bin/auth-service/auth-service.exe" .
 	@echo "[5/7] Building Electron app..."
 	@mkdir -p "$(ELECTRON_CACHE_DIR)"
 	@cd $(DESKTOP_DIR)/electron && npm install $(NPM_REGISTRY_FLAGS) && npm_config_platform=win32 npm_config_arch=x64 electron_config_cache=".electron-cache" force_no_cache=true node node_modules/electron/install.js && npm run build
@@ -610,7 +612,8 @@ windows-desktop:
 		"$(LAZYMIND_OUTPUT_DIR)/electron/electron.exe" \
 		"$(LAZYMIND_OUTPUT_DIR)/app/package.json" \
 		"$(LAZYMIND_OUTPUT_DIR)/renderer/index.html" \
-		"$(LAZYMIND_OUTPUT_DIR)/bin/core.exe"; do \
+		"$(LAZYMIND_OUTPUT_DIR)/bin/core.exe" \
+		"$(LAZYMIND_OUTPUT_DIR)/bin/auth-service/auth-service.exe"; do \
 		if [ ! -f "$$artifact" ]; then \
 			echo "ERROR: missing required runtime artifact: $$artifact"; \
 			exit 1; \

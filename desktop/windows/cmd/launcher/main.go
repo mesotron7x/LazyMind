@@ -4,8 +4,6 @@ package main
 
 import (
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,51 +46,31 @@ func main() {
 		defer job.close()
 	}
 
-	coreBin := filepath.Join(exeDir, "bin")
-	if isPortOpen("127.0.0.1", 8001, 500*time.Millisecond) {
-		fatal("core port 8001 is already in use; wait for the previous LazyMind instance to exit or stop the stale core.exe process")
-	}
-
-	coreProc, err := startHidden(coreBin, filepath.Join(coreBin, "core.exe"))
-	if err != nil {
-		fatal("failed to start core: " + err.Error())
-	}
-	assignToJob(job, coreProc, "core")
-
-	if !waitForHealth("http://127.0.0.1:8001/health", 30*time.Second) {
-		cleanupCore(coreProc)
-		fatal("core health check timed out")
-	}
-
 	electronExe := filepath.Join(exeDir, "electron", "electron.exe")
 	electronApp := filepath.Join(exeDir, "app")
 	electronProc, err := startHidden(exeDir, electronExe, electronApp)
 	if err != nil {
-		cleanupCore(coreProc)
 		fatal("failed to start electron: " + err.Error())
 	}
 	assignToJob(job, electronProc, "electron")
 
 	electronProc.Wait()
-
-	cleanupCore(coreProc)
 }
 
 func setEnv(exeDir string) {
 	envs := map[string]string{
-		"ACL_DB_DRIVER":                  "sqlite",
-		"ACL_DB_DSN":                     filepath.Join(exeDir, "data", "auth.db"),
-		"ELECTRON_RENDERER_DIR":          filepath.Join(exeDir, "renderer"),
-		"LAZYMIND_DESKTOP_ROOT":          exeDir,
-		"LAZYMIND_LAUNCHER_MANAGED_CORE": "1",
-		"LAZYMIND_STATE_BACKEND":         "memory",
-		"LAZYMIND_MODE":                  "desktop",
-		"LAZYMIND_JWT_SECRET":            "lazymind-desktop-local-dev",
-		"SERVER_PORT":                    "8001",
-		"SERVER_HOST":                    "127.0.0.1",
-		"LAZYMIND_DATA_DIR":              filepath.Join(exeDir, "data"),
-		"LAZYMIND_LOG_DIR":               filepath.Join(exeDir, "logs"),
-		"MIGRATIONS_DIR":                 filepath.Join(exeDir, "bin", "migrations", "sqlite"),
+		"ACL_DB_DRIVER":          "sqlite",
+		"ACL_DB_DSN":             filepath.Join(exeDir, "data", "auth.db"),
+		"ELECTRON_RENDERER_DIR":  filepath.Join(exeDir, "renderer"),
+		"LAZYMIND_DESKTOP_ROOT":  exeDir,
+		"LAZYMIND_STATE_BACKEND": "memory",
+		"LAZYMIND_MODE":          "desktop",
+		"LAZYMIND_JWT_SECRET":    "lazymind-desktop-local-dev",
+		"SERVER_PORT":            "8001",
+		"SERVER_HOST":            "127.0.0.1",
+		"LAZYMIND_DATA_DIR":      filepath.Join(exeDir, "data"),
+		"LAZYMIND_LOG_DIR":       filepath.Join(exeDir, "logs"),
+		"MIGRATIONS_DIR":         filepath.Join(exeDir, "bin", "migrations", "sqlite"),
 	}
 	for k, v := range envs {
 		os.Setenv(k, v)
@@ -112,78 +90,6 @@ func startHidden(dir, name string, args ...string) (*os.Process, error) {
 		return nil, err
 	}
 	return cmd.Process, nil
-}
-
-func waitForHealth(url string, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	client := &http.Client{Timeout: 2 * time.Second}
-	for time.Now().Before(deadline) {
-		resp, err := client.Get(url)
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return true
-			}
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	return false
-}
-
-func cleanupCore(proc *os.Process) {
-	killTree(proc)
-	if !waitForProcessExit(proc, 5*time.Second) {
-		log("core process did not report exit before timeout")
-	}
-	if !waitForPortClosed("127.0.0.1", 8001, 10*time.Second) {
-		log("core port 8001 did not close before timeout")
-	}
-}
-
-func killTree(proc *os.Process) {
-	if proc == nil {
-		return
-	}
-	cmd := exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", proc.Pid))
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNoWindow}
-	cmd.Run()
-}
-
-func waitForProcessExit(proc *os.Process, timeout time.Duration) bool {
-	if proc == nil {
-		return true
-	}
-	done := make(chan struct{})
-	go func() {
-		_, _ = proc.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
-}
-
-func waitForPortClosed(host string, port int, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if !isPortOpen(host, port, 500*time.Millisecond) {
-			return true
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	return !isPortOpen(host, port, 500*time.Millisecond)
-}
-
-func isPortOpen(host string, port int, timeout time.Duration) bool {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), timeout)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
 }
 
 func fatal(msg string) {

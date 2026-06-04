@@ -90,6 +90,10 @@ export function createProxyServer(config: ProxyConfig): ProxyServer {
     req.headers['x-desktop-secret'] = config.localSecret;
     req.headers['x-request-id'] = randomUUID();
 
+    if (route.stripPrefix && targetPath !== req.url) {
+      req.url = targetPath;
+    }
+
     proxy.web(req, res, {
       target: route.target,
       timeout: route.timeout || 30000,
@@ -105,9 +109,6 @@ export function createProxyServer(config: ProxyConfig): ProxyServer {
       }
     });
 
-    if (route.stripPrefix && targetPath !== req.url) {
-      req.url = targetPath;
-    }
   }
 
   return {

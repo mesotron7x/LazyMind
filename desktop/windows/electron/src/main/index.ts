@@ -7,7 +7,6 @@ import { initLifecycle } from './lifecycle';
 import { createProcessManager, getProcessConfigs } from './process-manager';
 import { createProxyServer, getDefaultRoutes, generateLocalSecret } from './proxy';
 import { createAssistantManager } from './assistant-manager';
-import { isLauncherManagedCore } from './runtime';
 import { DEFAULT_PORTS, PROTOCOL_SCHEME } from '../shared/constants';
 import type { ProcessManager } from './process-manager';
 import type { ProxyServer } from './proxy';
@@ -46,23 +45,24 @@ if (!gotSingleInstanceLock) {
 
     await proxyServer.start();
 
-    const initializeAssistant = () => {
+    const initializeAssistant = async () => {
       const assistantManager = createAssistantManager(proxyServer!);
-      assistantManager.initialize().catch((err) => {
-        console.error('Failed to initialize assistant manager:', err);
-      });
+      await assistantManager.initialize();
     };
 
-    if (isLauncherManagedCore()) {
-      initializeAssistant();
-    } else {
-      const configs = getProcessConfigs();
-      processManager = createProcessManager(configs);
-      setProcessManagerRef(processManager);
+    const configs = getProcessConfigs();
+    processManager = createProcessManager(configs);
+    setProcessManagerRef(processManager);
 
-      processManager.startAll().then(initializeAssistant).catch((err) => {
-        console.error('Failed to start services:', err);
+    try {
+      await processManager.start('core');
+      await waitForServiceHealthy(processManager, 'core', 30000);
+      await initializeAssistant();
+      void processManager.startAll().catch((err) => {
+        console.error('Failed to start background services:', err);
       });
+    } catch (err) {
+      console.error('Failed to start required services:', err);
     }
 
     const mainWindow = createMainWindow();
@@ -72,5 +72,28 @@ if (!gotSingleInstanceLock) {
     });
 
     initLifecycle(mainWindow, processManager, proxyServer);
+  });
+}
+
+function waitForServiceHealthy(manager: ProcessManager, name: string, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      const info = manager.getInfo(name);
+      if (info?.state === 'healthy') {
+        clearInterval(timer);
+        resolve();
+        return;
+      }
+      if (info?.state === 'failed') {
+        clearInterval(timer);
+        reject(new Error(`Service ${name} failed: ${info.error || 'unknown error'}`));
+        return;
+      }
+      if (Date.now() - startedAt > timeoutMs) {
+        clearInterval(timer);
+        reject(new Error(`Timeout waiting for ${name}`));
+      }
+    }, 300);
   });
 }
