@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'node:child_process';
+import { spawn, ChildProcess, execFile } from 'node:child_process';
 import net from 'node:net';
 import { EventEmitter } from 'node:events';
 import type { ProcessConfig, ProcessState, ProcessInfo, ProcessEvent } from './types';
@@ -44,15 +44,19 @@ export class ManagedProcess extends EventEmitter {
     this.setState('stopping');
     this.stopHealthCheck();
 
-    if (this.process && !this.process.killed) {
-      this.process.kill('SIGTERM');
-      await this.waitForExit(5000);
-      if (this.process && !this.process.killed) {
-        this.process.kill('SIGKILL');
-        await this.waitForExit(2000);
+    const child = this.process;
+    if (child && this.isProcessAlive(child)) {
+      child.kill('SIGTERM');
+      const exitedGracefully = await this.waitForExit(child, 5000);
+      if (!exitedGracefully && this.isProcessAlive(child)) {
+        await this.forceKill(child);
+        await this.waitForExit(child, 2000);
       }
     }
 
+    if (this.process === child) {
+      this.process = null;
+    }
     this.setState('stopped');
   }
 
@@ -76,30 +80,34 @@ export class ManagedProcess extends EventEmitter {
       SERVER_HOST: '127.0.0.1',
     };
 
-    this.process = spawn(this.config.executablePath, this.config.args || [], {
+    const child = spawn(this.config.executablePath, this.config.args || [], {
       cwd: this.config.cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: false,
       windowsHide: true,
     });
+    this.process = child;
 
     this._startedAt = Date.now();
 
-    this.process.stdout?.on('data', (data: Buffer) => {
+    child.stdout?.on('data', (data: Buffer) => {
       this.emitEvent({ type: 'stdout', name: this.config.name, data: data.toString() });
     });
 
-    this.process.stderr?.on('data', (data: Buffer) => {
+    child.stderr?.on('data', (data: Buffer) => {
       this.emitEvent({ type: 'stderr', name: this.config.name, data: data.toString() });
     });
 
-    this.process.on('exit', (code, signal) => {
+    child.on('exit', (code, signal) => {
       this.emitEvent({ type: 'exit', name: this.config.name, code, signal });
+      if (this.process === child) {
+        this.process = null;
+      }
       this.handleExit(code, signal);
     });
 
-    this.process.on('error', (err) => {
+    child.on('error', (err) => {
       this._error = err.message;
       this.setState('failed');
     });
@@ -231,11 +239,37 @@ export class ManagedProcess extends EventEmitter {
     return env;
   }
 
-  private waitForExit(timeoutMs: number): Promise<void> {
+  private isProcessAlive(child: ChildProcess): boolean {
+    return child.pid !== undefined && child.exitCode === null && child.signalCode === null;
+  }
+
+  private async forceKill(child: ChildProcess): Promise<void> {
+    if (process.platform === 'win32' && child.pid !== undefined) {
+      await new Promise<void>((resolve) => {
+        execFile(
+          'taskkill',
+          ['/T', '/F', '/PID', String(child.pid)],
+          { windowsHide: true },
+          () => resolve(),
+        );
+      });
+      return;
+    }
+    child.kill('SIGKILL');
+  }
+
+  private waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
     return new Promise((resolve) => {
-      if (!this.process || this.process.killed) { resolve(); return; }
-      const timeout = setTimeout(resolve, timeoutMs);
-      this.process.once('exit', () => { clearTimeout(timeout); resolve(); });
+      if (!this.isProcessAlive(child)) { resolve(true); return; }
+      const timeout = setTimeout(() => {
+        child.off('exit', onExit);
+        resolve(false);
+      }, timeoutMs);
+      const onExit = () => {
+        clearTimeout(timeout);
+        resolve(true);
+      };
+      child.once('exit', onExit);
     });
   }
 

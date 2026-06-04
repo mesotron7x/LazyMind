@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -25,13 +26,17 @@ func main() {
 	setEnv(exeDir)
 
 	coreBin := filepath.Join(exeDir, "bin")
+	if isPortOpen("127.0.0.1", 8001, 500*time.Millisecond) {
+		fatal("core port 8001 is already in use; wait for the previous LazyMind instance to exit or stop the stale core.exe process")
+	}
+
 	coreProc, err := startHidden(coreBin, filepath.Join(coreBin, "core.exe"))
 	if err != nil {
 		fatal("failed to start core: " + err.Error())
 	}
 
 	if !waitForHealth("http://127.0.0.1:8001/health", 30*time.Second) {
-		killTree(coreProc)
+		cleanupCore(coreProc)
 		fatal("core health check timed out")
 	}
 
@@ -39,13 +44,13 @@ func main() {
 	electronApp := filepath.Join(exeDir, "app")
 	electronProc, err := startHidden(exeDir, electronExe, electronApp)
 	if err != nil {
-		killTree(coreProc)
+		cleanupCore(coreProc)
 		fatal("failed to start electron: " + err.Error())
 	}
 
 	electronProc.Wait()
 
-	killTree(coreProc)
+	cleanupCore(coreProc)
 }
 
 func setEnv(exeDir string) {
@@ -100,6 +105,16 @@ func waitForHealth(url string, timeout time.Duration) bool {
 	return false
 }
 
+func cleanupCore(proc *os.Process) {
+	killTree(proc)
+	if !waitForProcessExit(proc, 5*time.Second) {
+		log("core process did not report exit before timeout")
+	}
+	if !waitForPortClosed("127.0.0.1", 8001, 10*time.Second) {
+		log("core port 8001 did not close before timeout")
+	}
+}
+
 func killTree(proc *os.Process) {
 	if proc == nil {
 		return
@@ -109,15 +124,59 @@ func killTree(proc *os.Process) {
 	cmd.Run()
 }
 
+func waitForProcessExit(proc *os.Process, timeout time.Duration) bool {
+	if proc == nil {
+		return true
+	}
+	done := make(chan struct{})
+	go func() {
+		_, _ = proc.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
+func waitForPortClosed(host string, port int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !isPortOpen(host, port, 500*time.Millisecond) {
+			return true
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return !isPortOpen(host, port, 500*time.Millisecond)
+}
+
+func isPortOpen(host string, port int, timeout time.Duration) bool {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), timeout)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
 func fatal(msg string) {
 	line := fmt.Sprintf("LazyMind launcher: %s\n", msg)
 	fmt.Fprint(os.Stderr, line)
+	log(line)
+	os.Exit(1)
+}
+
+func log(line string) {
 	if logPath != "" {
+		if len(line) == 0 || line[len(line)-1] != '\n' {
+			line += "\n"
+		}
 		_ = os.MkdirAll(filepath.Dir(logPath), 0755)
 		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
 			defer f.Close()
 			_, _ = f.WriteString(time.Now().Format(time.RFC3339) + " " + line)
 		}
 	}
-	os.Exit(1)
 }

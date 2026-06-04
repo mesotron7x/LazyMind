@@ -17,55 +17,60 @@ let proxyServer: ProxyServer | null = null;
 
 registerSchemeAsPrivileged();
 
-app.whenReady().then(async () => {
-  Menu.setApplicationMenu(null);
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.whenReady().then(async () => {
+    Menu.setApplicationMenu(null);
 
-  registerProtocolHandler();
+    registerProtocolHandler();
 
-  await ensureDataDir();
+    await ensureDataDir();
 
-  registerAllIPCHandlers();
+    registerAllIPCHandlers();
 
-  const splash = createSplashWindow();
+    const splash = createSplashWindow();
 
-  const localSecret = generateLocalSecret();
-  proxyServer = createProxyServer({
-    port: DEFAULT_PORTS.proxy,
-    host: '127.0.0.1',
-    routes: getDefaultRoutes(),
-    localSecret,
-    allowedOrigins: [
-      `${PROTOCOL_SCHEME}://app`,
-      'http://localhost:5173',
-    ],
-  });
-
-  await proxyServer.start();
-
-  const initializeAssistant = () => {
-    const assistantManager = createAssistantManager(proxyServer!);
-    assistantManager.initialize().catch((err) => {
-      console.error('Failed to initialize assistant manager:', err);
+    const localSecret = generateLocalSecret();
+    proxyServer = createProxyServer({
+      port: DEFAULT_PORTS.proxy,
+      host: '127.0.0.1',
+      routes: getDefaultRoutes(),
+      localSecret,
+      allowedOrigins: [
+        `${PROTOCOL_SCHEME}://app`,
+        'http://localhost:5173',
+      ],
     });
-  };
 
-  if (isLauncherManagedCore()) {
-    initializeAssistant();
-  } else {
-    const configs = getProcessConfigs();
-    processManager = createProcessManager(configs);
-    setProcessManagerRef(processManager);
+    await proxyServer.start();
 
-    processManager.startAll().then(initializeAssistant).catch((err) => {
-      console.error('Failed to start services:', err);
+    const initializeAssistant = () => {
+      const assistantManager = createAssistantManager(proxyServer!);
+      assistantManager.initialize().catch((err) => {
+        console.error('Failed to initialize assistant manager:', err);
+      });
+    };
+
+    if (isLauncherManagedCore()) {
+      initializeAssistant();
+    } else {
+      const configs = getProcessConfigs();
+      processManager = createProcessManager(configs);
+      setProcessManagerRef(processManager);
+
+      processManager.startAll().then(initializeAssistant).catch((err) => {
+        console.error('Failed to start services:', err);
+      });
+    }
+
+    const mainWindow = createMainWindow();
+    mainWindow.once('ready-to-show', () => {
+      splash.close();
+      mainWindow.show();
     });
-  }
 
-  const mainWindow = createMainWindow();
-  mainWindow.once('ready-to-show', () => {
-    splash.close();
-    mainWindow.show();
+    initLifecycle(mainWindow, processManager, proxyServer);
   });
-
-  initLifecycle(mainWindow, processManager, proxyServer);
-});
+}
