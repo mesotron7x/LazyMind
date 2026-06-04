@@ -36,6 +36,7 @@ import ExternalServicesPage from "@/modules/modelProvider/pages/ExternalServices
 import DefaultServicesPage from "@/modules/modelProvider/pages/DefaultServicesPage";
 import { SelfEvolutionHomePage, SelfEvolutionDetailPage } from "@/modules/selfEvolution";
 import { getAntdLocale } from "@/i18n/antdLocale";
+import AssistantManagement from "@/modules/assistants/AssistantManagement";
 
 export default function AppRouter() {
   const { i18n } = useTranslation();
@@ -83,6 +84,7 @@ export default function AppRouter() {
             <Route path="external-services" element={<ExternalServicesPage />} />
             <Route path="default-services" element={<DefaultServicesPage />} />
           </Route>
+          <Route path="assistants" element={<AssistantManagement />} />
           <Route path="memory-management" element={<MemoryManagement />}>
             <Route index element={<MemoryManagementListPage />} />
             <Route path="tools" element={<MemoryManagementListPage />} />

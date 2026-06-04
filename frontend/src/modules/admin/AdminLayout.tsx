@@ -9,6 +9,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { AgentAppsAuth } from "@/components/auth";
 import logoImage from "@/public/Lazy.png";
+import { isDesktopMode } from "@/utils/desktop";
 import "./index.scss";
 
 const { Content, Sider } = Layout;
@@ -30,6 +31,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const userInfo = AgentAppsAuth.getUserInfo();
+  const desktopMode = isDesktopMode();
   const isLoggedIn = Boolean(userInfo?.token);
   const isAdminUser = isAdminRole(userInfo?.role);
 
@@ -72,6 +74,10 @@ export default function AdminLayout() {
       navigate(String(key));
     }
   };
+
+  if (desktopMode) {
+    return <Navigate to="/assistants" replace />;
+  }
 
   if (!isLoggedIn) {
     return <Navigate to="/login" replace />;

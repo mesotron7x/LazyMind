@@ -35,7 +35,11 @@ import {
   isDeveloperModeActive,
   setDeveloperModeActive,
 } from "@/utils/developerMode";
-import { isDesktopMode, desktopAutoLogin } from "@/utils/desktop";
+import {
+  isDesktopMode,
+  desktopAutoLogin,
+  syncDesktopAssistantAuth,
+} from "@/utils/desktop";
 import RecordList from "@/modules/chat/components/RecordList";
 import {
   CHAT_RESUME_CONVERSATION_KEY,
@@ -95,7 +99,8 @@ export default function MainLayout() {
   const [profileForm] = Form.useForm<ProfileFormValues>();
 
   const [userInfo, setUserInfo] = useState(() => AgentAppsAuth.getUserInfo());
-  const [desktopReady, setDesktopReady] = useState(!isDesktopMode());
+  const desktopMode = isDesktopMode();
+  const [desktopReady, setDesktopReady] = useState(!desktopMode);
   const isLoggedIn = Boolean(userInfo?.token);
   const userName = userInfo?.username || "";
   const isAdminUser = isAdminRole(userInfo?.role);
@@ -124,7 +129,7 @@ export default function MainLayout() {
 
   const settingsMenuItems = [
     {
-      key: "/admin",
+      key: desktopMode ? "/assistants" : "/admin",
       label: t("layout.systemManagement"),
       icon: <TeamOutlined className="settings-popover-icon" />,
     },
@@ -197,12 +202,21 @@ export default function MainLayout() {
   }, []);
 
   useEffect(() => {
-    if (!isDesktopMode()) return;
+    if (!desktopMode) return;
     desktopAutoLogin().then((ok) => {
       if (ok) setUserInfo(AgentAppsAuth.getUserInfo());
       setDesktopReady(true);
     });
-  }, []);
+  }, [desktopMode]);
+
+  useEffect(() => {
+    if (!desktopMode) return;
+    return window.lazymind?.onAssistantChange((assistant) => {
+      if (!assistant?.id) return;
+      syncDesktopAssistantAuth(assistant);
+      setUserInfo(AgentAppsAuth.getUserInfo());
+    });
+  }, [desktopMode]);
 
   const refreshLayoutUser = useCallback(async () => {
     if (!AgentAppsAuth.isLoggedIn()) {
@@ -416,7 +430,7 @@ export default function MainLayout() {
   };
 
   const handleLogout = () => {
-    if (isDesktopMode()) return;
+    if (desktopMode) return;
     AgentAppsAuth.logout(
       `${window.location.origin}${window.BASENAME || ""}/login`,
     );
@@ -606,7 +620,7 @@ export default function MainLayout() {
     }
   };
 
-  if (!isLoggedIn && !isDesktopMode()) {
+  if (!isLoggedIn && !desktopMode) {
     return <Navigate to="/login" replace />;
   }
 
@@ -749,23 +763,24 @@ export default function MainLayout() {
                       )}
                     </Button>
                   ))}
-                  {isLoggedIn ? (
-                    <Button
-                      type="text"
-                      className="settings-popover-button"
-                      onClick={handleLogout}
-                    >
-                      <span>{t("layout.logout")}</span>
-                    </Button>
-                  ) : (
-                    <Button
-                      type="text"
-                      className="settings-popover-button"
-                      onClick={handleGoLogin}
-                    >
-                      <span>{t("layout.goLogin")}</span>
-                    </Button>
-                  )}
+                  {!desktopMode &&
+                    (isLoggedIn ? (
+                      <Button
+                        type="text"
+                        className="settings-popover-button"
+                        onClick={handleLogout}
+                      >
+                        <span>{t("layout.logout")}</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        type="text"
+                        className="settings-popover-button"
+                        onClick={handleGoLogin}
+                      >
+                        <span>{t("layout.goLogin")}</span>
+                      </Button>
+                    ))}
                 </div>
               }
               arrow={false}
