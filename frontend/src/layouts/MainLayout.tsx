@@ -148,7 +148,7 @@ export default function MainLayout() {
       icon: <ApiOutlined />,
     },
   ];
-  const hideEvo = !!import.meta.env.VITE_HIDE_EVO;
+  const hideEvo = import.meta.env.VITE_HIDE_EVO === "true";
   const aiEvolutionNavItems = [
     {
       key: "/memory-management",
