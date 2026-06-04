@@ -1,4 +1,5 @@
 import http from 'node:http';
+import net from 'node:net';
 import httpProxy from 'http-proxy';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { DEFAULT_PORTS, PROTOCOL_SCHEME } from '../../shared/constants';
@@ -37,6 +38,7 @@ export function createProxyServer(config: ProxyConfig): ProxyServer {
   let currentUserName = '';
   let server: http.Server | null = null;
   let running = false;
+  const sockets = new Set<net.Socket>();
 
   proxy.on('proxyRes', (proxyRes, _req, res) => {
     const contentType = proxyRes.headers['content-type'] || '';
@@ -113,6 +115,10 @@ export function createProxyServer(config: ProxyConfig): ProxyServer {
       return new Promise((resolve, reject) => {
         server = http.createServer(handleRequest);
         server.on('error', reject);
+        server.on('connection', (socket) => {
+          sockets.add(socket);
+          socket.on('close', () => sockets.delete(socket));
+        });
         server.listen(config.port, config.host, () => {
           running = true;
           resolve();
@@ -132,11 +138,32 @@ export function createProxyServer(config: ProxyConfig): ProxyServer {
     stop(): Promise<void> {
       return new Promise((resolve) => {
         running = false;
-        if (server) {
-          server.close(() => resolve());
-        } else {
+        proxy.close();
+
+        const activeServer = server;
+        server = null;
+        if (!activeServer) {
           resolve();
+          return;
         }
+
+        let resolved = false;
+        const finish = () => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(forceClose);
+          resolve();
+        };
+        const forceClose = setTimeout(() => {
+          activeServer.closeAllConnections?.();
+          for (const socket of sockets) {
+            socket.destroy();
+          }
+          finish();
+        }, 2000);
+
+        activeServer.close(finish);
+        activeServer.closeIdleConnections?.();
       });
     },
 

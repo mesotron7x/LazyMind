@@ -46,11 +46,16 @@ export class ManagedProcess extends EventEmitter {
 
     const child = this.process;
     if (child && this.isProcessAlive(child)) {
-      child.kill('SIGTERM');
-      const exitedGracefully = await this.waitForExit(child, 5000);
-      if (!exitedGracefully && this.isProcessAlive(child)) {
+      if (process.platform === 'win32') {
         await this.forceKill(child);
         await this.waitForExit(child, 2000);
+      } else {
+        child.kill('SIGTERM');
+        const exitedGracefully = await this.waitForExit(child, 5000);
+        if (!exitedGracefully && this.isProcessAlive(child)) {
+          await this.forceKill(child);
+          await this.waitForExit(child, 2000);
+        }
       }
     }
 
