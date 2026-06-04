@@ -1,0 +1,23 @@
+{
+  "default": "lazymind-cloud",
+  "environments": [
+    {
+      "name": "lazymind-cloud",
+      "type": "cloud",
+      "setupScript": ".codex/environments/lazymind-cloud/setup.sh",
+      "maintenanceScript": ".codex/environments/lazymind-cloud/maintenance.sh"
+    },
+    {
+      "name": "lazymind-windows-desktop",
+      "type": "local",
+      "platform": "windows",
+      "setupScript": ".codex/environments/lazymind-windows-desktop/setup.windows.ps1",
+      "actions": [
+        {
+          "name": "Debug",
+          "script": ".codex/environments/lazymind-windows-desktop/debug.windows.ps1"
+        }
+      ]
+    }
+  ]
+}

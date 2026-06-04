@@ -1,0 +1,15 @@
+{
+  "name": "lazymind-windows-desktop",
+  "setup": {
+    "windows": ".codex/environments/lazymind-windows-desktop/setup.windows.ps1"
+  },
+  "actions": [
+    {
+      "name": "Debug",
+      "icon": "bug",
+      "scripts": {
+        "windows": ".codex/environments/lazymind-windows-desktop/debug.windows.ps1"
+      }
+    }
+  ]
+}

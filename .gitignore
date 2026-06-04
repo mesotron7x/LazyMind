@@ -32,6 +32,10 @@ wget-log
 .claude
 .cursor
 .codex
+!.codex/
+.codex/*
+!.codex/environments/
+!.codex/environments/**
 .codex-gocache/
 .codex-gomodcache/
 .cache/
@@ -94,7 +98,7 @@ data/evo/
 # macOS
 .DS_Store
 
-AGENTS.md
+!AGENTS.md
 algorithm/.agentic_rag/
 version.*
 algorithm/Dockerfile.chat-rebase
