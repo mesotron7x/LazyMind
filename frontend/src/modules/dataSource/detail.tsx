@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Tag,
   Typography,
   message,
@@ -22,6 +23,7 @@ import { getLocalizedErrorMessage } from "@/components/request";
 import "./detail.scss";
 import DataSourceDetailView from "@/modules/dataSource/common/components/DataSourceDetailView";
 import DataSourceSyncPickerModal from "@/modules/dataSource/common/components/DataSourceSyncPickerModal";
+import { useDesktopScanServices } from "./desktopScanServices";
 import {
   CLOUD_SYNC_POLL_INTERVAL_MS,
   CLOUD_SYNC_TIMEOUT_MS,
@@ -631,6 +633,7 @@ export default function DataSourceDetail() {
     checkedCount: number;
     time: string;
   } | null>(null);
+  const scanServices = useDesktopScanServices();
   const syncPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncPollingActiveRef = useRef(false);
   const syncTreeRequestSeqRef = useRef(0);
@@ -784,6 +787,18 @@ export default function DataSourceDetail() {
       keywordValue: string,
       options: { selectAll?: boolean; closeOnError?: boolean } = {},
     ) => {
+      if (!scanServices.ready) {
+        message[scanServices.alertType === "error" ? "error" : "warning"](
+          scanServices.description
+            ? `${scanServices.message}: ${scanServices.description}`
+            : scanServices.message,
+        );
+        if (options.closeOnError) {
+          setSyncPickerOpen(false);
+        }
+        return;
+      }
+
       if (!detailSource?.id) {
         message.error("未获取到数据源信息，无法加载目录树。");
         if (options.closeOnError) {
@@ -862,7 +877,7 @@ export default function DataSourceDetail() {
         }
       }
     },
-    [detailSource, t],
+    [detailSource, scanServices, t],
   );
 
   const loadSyncTreeChildren = useCallback(
@@ -948,6 +963,15 @@ export default function DataSourceDetail() {
   }, [loadSyncTree, syncKeyword, syncPickerOpen]);
 
   const openSyncPicker = () => {
+    if (!scanServices.ready) {
+      message[scanServices.alertType === "error" ? "error" : "warning"](
+        scanServices.description
+          ? `${scanServices.message}: ${scanServices.description}`
+          : scanServices.message,
+      );
+      return;
+    }
+
     if (!detailSource?.id) {
       message.error("未获取到数据源信息，无法加载目录树。");
       return;
@@ -1368,6 +1392,17 @@ export default function DataSourceDetail() {
       onOpenSyncPicker={() => {
         void openSyncPicker();
       }}
+      syncDisabled={!scanServices.ready}
+      serviceAlert={
+        scanServices.desktopMode && !scanServices.ready ? (
+          <Alert
+            showIcon
+            type={scanServices.alertType}
+            message={scanServices.message}
+            description={scanServices.description}
+          />
+        ) : null
+      }
       syncPickerModal={
         <DataSourceSyncPickerModal
           t={t}

@@ -534,18 +534,6 @@ export default function MainLayout() {
     return detail;
   };
 
-  const handleOpenProfile = async () => {
-    setProfileModalOpen(true);
-    setProfileLoading(true);
-    try {
-      await refreshCurrentProfile();
-    } catch {
-      setProfileModalOpen(false);
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
   const handleCloseProfile = () => {
     setProfileModalOpen(false);
     setProfileLoading(false);
@@ -805,18 +793,7 @@ export default function MainLayout() {
               </div>
             </Popover>
             {userName && (
-              <div
-                className="bottom-item user-item"
-                onClick={handleOpenProfile}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    handleOpenProfile();
-                  }
-                }}
-              >
+              <div className="bottom-item user-item" aria-label={userName}>
                 <UserOutlined className="bottom-icon" />
                 {shouldRenderMenuContent && <span className="bottom-text">{userName}</span>}
               </div>

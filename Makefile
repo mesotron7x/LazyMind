@@ -565,7 +565,7 @@ windows-desktop:
 	@echo "Output: $(LAZYMIND_OUTPUT_DIR)"
 	@echo ""
 	@echo "[1/8] Terminating old processes..."
-	-@powershell -NoProfile -Command "Get-Process -Name 'LazyMind','electron','core' -ErrorAction SilentlyContinue | Stop-Process -Force" 2>/dev/null || true
+	-@powershell -NoProfile -Command "Get-Process -Name 'LazyMind','electron','core','scan-control-plane','file-watcher' -ErrorAction SilentlyContinue | Stop-Process -Force" 2>/dev/null || true
 	@echo "[2/8] Cleaning old output directory..."
 	@rm -rf "$(LAZYMIND_OUTPUT_DIR)"
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin" "$(LAZYMIND_OUTPUT_DIR)/electron" "$(LAZYMIND_OUTPUT_DIR)/app" "$(LAZYMIND_OUTPUT_DIR)/renderer" "$(LAZYMIND_OUTPUT_DIR)/data" "$(LAZYMIND_OUTPUT_DIR)/logs" "$(LAZYMIND_OUTPUT_DIR)/resources"
@@ -577,6 +577,10 @@ windows-desktop:
 	@cp -r backend/core/migrations "$(LAZYMIND_OUTPUT_DIR)/bin/migrations"
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/config"
 	@cp backend/core/config/model_catalog.yaml "$(LAZYMIND_OUTPUT_DIR)/bin/config/model_catalog.yaml"
+	@echo "Building scan-control-plane..."
+	@cd backend/scan-control-plane && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(abspath $(LAZYMIND_OUTPUT_DIR))/bin/scan-control-plane.exe" ./cmd
+	@echo "Building file-watcher..."
+	@cd backend/file-watcher && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(abspath $(LAZYMIND_OUTPUT_DIR))/bin/file-watcher.exe" ./cmd
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/auth-service"
 	@cd $(DESKTOP_DIR)/cmd/auth-service && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(abspath $(LAZYMIND_OUTPUT_DIR))/bin/auth-service/auth-service.exe" .
 	@echo "[5/8] Building Electron app..."
@@ -615,6 +619,8 @@ windows-desktop:
 		"$(LAZYMIND_OUTPUT_DIR)/app/package.json" \
 		"$(LAZYMIND_OUTPUT_DIR)/renderer/index.html" \
 		"$(LAZYMIND_OUTPUT_DIR)/bin/core.exe" \
+		"$(LAZYMIND_OUTPUT_DIR)/bin/scan-control-plane.exe" \
+		"$(LAZYMIND_OUTPUT_DIR)/bin/file-watcher.exe" \
 		"$(LAZYMIND_OUTPUT_DIR)/bin/auth-service/auth-service.exe"; do \
 		if [ ! -f "$$artifact" ]; then \
 			echo "ERROR: missing required runtime artifact: $$artifact"; \

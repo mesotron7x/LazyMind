@@ -589,11 +589,11 @@
   }
 
   .user-item {
-    cursor: pointer;
+    cursor: default;
 
     &:hover {
-      background: rgba(15, 23, 42, 0.05);
-      color: #111827;
+      background: transparent;
+      color: #374151;
     }
   }
 

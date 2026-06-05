@@ -40,6 +40,8 @@ export interface DataSourceDetailViewProps {
   columns: ColumnsType<DocumentStatusRow>;
   onBack: () => void;
   onOpenSyncPicker: () => void;
+  syncDisabled?: boolean;
+  serviceAlert?: ReactNode;
   syncPickerModal: ReactNode;
 }
 
@@ -56,6 +58,8 @@ export default function DataSourceDetailView({
   columns,
   onBack,
   onOpenSyncPicker,
+  syncDisabled = false,
+  serviceAlert,
   syncPickerModal,
 }: DataSourceDetailViewProps) {
   if (!detailSource && detailLoading) {
@@ -69,6 +73,7 @@ export default function DataSourceDetailView({
         >
           {t("admin.dataSourceBackToList")}
         </Button>
+        {serviceAlert}
         <Card loading />
       </div>
     );
@@ -85,6 +90,7 @@ export default function DataSourceDetailView({
         >
           {t("admin.dataSourceBackToList")}
         </Button>
+        {serviceAlert}
         <Card>
           <Empty description={t("admin.dataSourceDetailNotFound")} />
         </Card>
@@ -118,6 +124,8 @@ export default function DataSourceDetailView({
           {t("admin.dataSourceDetailLastSync", { time: lastSync })}
         </Paragraph>
       </div>
+
+      {serviceAlert}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
@@ -173,7 +181,7 @@ export default function DataSourceDetailView({
             <Button
               type="primary"
               loading={detailLoading}
-              disabled={detailLoading}
+              disabled={detailLoading || syncDisabled}
               onClick={onOpenSyncPicker}
             >
               {t("admin.dataSourceDetailSyncNow")}

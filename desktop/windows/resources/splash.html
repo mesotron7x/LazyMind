@@ -4,11 +4,16 @@
   <meta charset="UTF-8">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
     body {
       display: flex;
       align-items: center;
       justify-content: center;
-      height: 100vh;
       background: transparent;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       -webkit-app-region: drag;
@@ -18,27 +23,27 @@
       text-align: center;
       background: rgba(255, 255, 255, 0.96);
       border-radius: 16px;
-      padding: 36px 48px 40px;
+      padding: 24px 44px 26px;
       box-shadow: 0 8px 32px rgba(15, 23, 42, 0.14);
     }
     .logo {
       display: block;
-      width: 132px;
-      height: 132px;
+      width: 108px;
+      height: 108px;
       object-fit: contain;
-      margin: 0 auto 18px;
+      margin: 0 auto 14px;
       -webkit-user-drag: none;
     }
     .title {
       font-size: 24px;
       font-weight: 600;
       color: #1f2937;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .subtitle {
       font-size: 14px;
       color: #64748b;
-      margin-bottom: 24px;
+      margin-bottom: 18px;
     }
     .spinner {
       width: 32px;

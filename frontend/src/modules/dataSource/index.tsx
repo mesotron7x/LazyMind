@@ -47,6 +47,7 @@ import { BASE_URL, axiosInstance, getLocalizedErrorMessage } from "@/components/
 
 import "./index.scss";
 import DataSourceWizardModal from "./components/DataSourceWizardModal";
+import { useDesktopScanServices } from "./desktopScanServices";
 import ExternalServiceConfigModal, {
   type ExternalServiceConfigModalService,
 } from "@/modules/modelProvider/components/ExternalServiceConfigModal";
@@ -901,6 +902,7 @@ export default function DataSourceManagement() {
   const sourceListRequestSeqRef = useRef(0);
   const assetSearchInitializedRef = useRef(false);
   const feishuAuthAccountsLoadedRef = useRef(false);
+  const scanServices = useDesktopScanServices();
 
   const syncMode = Form.useWatch("syncMode", form) || "scheduled";
   const feishuTargetType = (Form.useWatch("targetType", form) || "wiki_space") as FeishuTargetType;
@@ -1716,6 +1718,17 @@ export default function DataSourceManagement() {
       keyword?: string;
     },
   ) => {
+    if (!scanServices.apiReady) {
+      if (showSuccessMessage && scanServices.message) {
+        message[scanServices.alertType === "error" ? "error" : "warning"](
+          scanServices.description
+            ? `${scanServices.message}: ${scanServices.description}`
+            : scanServices.message,
+        );
+      }
+      return;
+    }
+
     const client = createScanV2ApiClient();
     const nextPage = Math.max(1, options?.page ?? sourceListPage);
     const nextPageSize = Math.max(
@@ -3282,6 +3295,15 @@ export default function DataSourceManagement() {
         </button>
       </div>
 
+      {scanServices.desktopMode && !scanServices.ready ? (
+        <Alert
+          showIcon
+          type={scanServices.alertType}
+          message={scanServices.message}
+          description={scanServices.description}
+        />
+      ) : null}
+
       <section className="data-source-workbench">
         {activeView === "assets" ? (
           <main className="data-source-asset-directory">
@@ -3297,6 +3319,7 @@ export default function DataSourceManagement() {
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
+                disabled={!scanServices.ready}
                 onClick={() => setCreateProviderModalOpen(true)}
               >
                 {t("admin.dataSourceCreateKnowledgeSource")}

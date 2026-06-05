@@ -1,4 +1,5 @@
 import { spawn, ChildProcess, execFile } from 'node:child_process';
+import fs from 'node:fs';
 import net from 'node:net';
 import { EventEmitter } from 'node:events';
 import type { ProcessConfig, ProcessState, ProcessInfo, ProcessEvent } from './types';
@@ -28,6 +29,18 @@ export class ManagedProcess extends EventEmitter {
     if (this._state === 'starting' || this._state === 'healthy') return;
     this.setState('starting');
     this._error = undefined;
+
+    if (!fs.existsSync(this.config.executablePath)) {
+      this._error = `Executable not found: ${this.config.executablePath}`;
+      this.setState('failed');
+      return;
+    }
+
+    if (this.config.cwd && !fs.existsSync(this.config.cwd)) {
+      this._error = `Working directory not found: ${this.config.cwd}`;
+      this.setState('failed');
+      return;
+    }
 
     if (await this.isPortInUse(this.config.port)) {
       this._error = `Port ${this.config.port} is already in use`;

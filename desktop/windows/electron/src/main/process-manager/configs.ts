@@ -410,7 +410,9 @@ export function getProcessConfigs(): ProcessConfig[] {
     },
   ];
 
+  const requiredDesktopOptionalServices = new Set(['scan-control-plane', 'file-watcher']);
   const availableOptionalConfigs = optionalConfigs.filter((config) => {
+    if (desktopRuntime && requiredDesktopOptionalServices.has(config.name)) return true;
     if (desktopRuntime && !fileExists(config.executablePath)) return false;
     if (!desktopRuntime && config.cwd && !dirExists(config.cwd)) return false;
     return true;
