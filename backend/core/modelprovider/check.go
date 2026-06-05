@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"gorm.io/gorm"
 
 	"lazymind/core/common"
 	"lazymind/core/common/orm"
@@ -580,11 +582,13 @@ func CheckGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load parent provider to determine category for routing.
-	var parent orm.UserModelProvider
-	if err := db.WithContext(r.Context()).
-		Where("id = ? AND create_user_id = ? AND deleted_at IS NULL", parentID, userID).
-		Take(&parent).Error; err != nil {
-		common.ReplyErr(w, "model provider not found", http.StatusNotFound)
+	parent, err := resolveUserModelProvider(r.Context(), db, userID, "", parentID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.ReplyErr(w, "model provider not found", http.StatusNotFound)
+			return
+		}
+		common.ReplyErr(w, "query model provider failed", http.StatusInternalServerError)
 		return
 	}
 	apiKeyRequired := isAPIKeyRequiredForBaseURL(r.Context(), db, parent.DefaultModelProviderID, urlStr)
@@ -645,7 +649,7 @@ func CheckGroup(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		tx := db.WithContext(r.Context()).
 			Model(&orm.UserModelProviderGroup{}).
-			Where("id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, parentID, userID).
+			Where("id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, parent.ID, userID).
 			Updates(map[string]interface{}{
 				"is_verified": true,
 				"updated_at":  now,

@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"lazymind/core/common"
@@ -19,11 +18,17 @@ import (
 func setupVerifiedProviderTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	dbName := "verified_provider_" + strings.ReplaceAll(t.Name(), "/", "_")
-	db, err := gorm.Open(sqlite.Open("file:"+dbName+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := orm.Connect(orm.DriverSQLite, t.TempDir()+"/verified-provider.db")
 	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
+		t.Fatalf("connect sqlite: %v", err)
 	}
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
 	if err := db.AutoMigrate(
 		&orm.DefaultModelProvider{},
 		&orm.UserModelProvider{},
@@ -32,8 +37,8 @@ func setupVerifiedProviderTestDB(t *testing.T) *gorm.DB {
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	store.Init(db, nil, nil)
-	return db
+	store.Init(db.DB, nil, nil)
+	return db.DB
 }
 
 func seedVerifiedProviderGroup(t *testing.T, db *gorm.DB, userID, providerID, groupID, name, category string) {

@@ -3,11 +3,9 @@ package modelprovider
 import (
 	"context"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"lazymind/core/common/orm"
@@ -16,11 +14,17 @@ import (
 func setupListProviderTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	dbName := "list_provider_" + strings.ReplaceAll(t.Name(), "/", "_")
-	db, err := gorm.Open(sqlite.Open("file:"+dbName+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := orm.Connect(orm.DriverSQLite, t.TempDir()+"/list-provider.db")
 	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
+		t.Fatalf("connect sqlite: %v", err)
 	}
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
 	if err := db.AutoMigrate(
 		&orm.DefaultModelProvider{},
 		&orm.DefaultModel{},
@@ -29,13 +33,18 @@ func setupListProviderTestDB(t *testing.T) *gorm.DB {
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	return db.DB
+}
+
+func ensureUserProviderUniqueIndex(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
 	if err := db.Exec(`
 		CREATE UNIQUE INDEX IF NOT EXISTS uk_user_model_providers_user_default_provider
 		ON user_model_providers (create_user_id, default_model_provider_id)
 	`).Error; err != nil {
 		t.Fatalf("create provider unique index: %v", err)
 	}
-	return db
 }
 
 func TestBuildListItemsReturnsConfigurationFlagFromVerifiedGroups(t *testing.T) {
@@ -257,6 +266,7 @@ func TestBuildListItemsOmitsMinerULocalPresetWithoutConfiguredURL(t *testing.T) 
 
 func TestSyncUserProvidersFromDefaultsIncludesSiliconFlow(t *testing.T) {
 	db := setupListProviderTestDB(t)
+	ensureUserProviderUniqueIndex(t, db)
 	seedDefaultProviders(t, db, []orm.DefaultModelProvider{
 		defaultProvider("provider-qwen", "Qwen", "https://dashscope.aliyuncs.com/"),
 		defaultProvider("provider-siliconflow", "SiliconFlow", "https://api.siliconflow.cn/v1/"),
@@ -285,6 +295,7 @@ func TestSyncUserProvidersFromDefaultsIncludesSiliconFlow(t *testing.T) {
 
 func TestSyncUserProvidersFromDefaultsRestoresSoftDeletedProvider(t *testing.T) {
 	db := setupListProviderTestDB(t)
+	ensureUserProviderUniqueIndex(t, db)
 	provider := defaultProvider("provider-siliconflow", "SiliconFlow", "https://api.siliconflow.cn/v1/")
 	seedDefaultProviders(t, db, []orm.DefaultModelProvider{provider})
 
@@ -330,6 +341,7 @@ func TestSyncUserProvidersFromDefaultsRestoresSoftDeletedProvider(t *testing.T) 
 
 func TestSyncUserProvidersFromDefaultsRefreshesCatalogFields(t *testing.T) {
 	db := setupListProviderTestDB(t)
+	ensureUserProviderUniqueIndex(t, db)
 	provider := defaultProvider("provider-siliconflow", "SiliconFlow", "https://api.siliconflow.cn/v1/")
 	seedDefaultProviders(t, db, []orm.DefaultModelProvider{provider})
 

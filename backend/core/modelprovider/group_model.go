@@ -81,10 +81,7 @@ func AddGroupModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var parent orm.UserModelProvider
-	err := db.WithContext(r.Context()).
-		Where("id = ? AND create_user_id = ? AND deleted_at IS NULL", parentID, userID).
-		Take(&parent).Error
+	parent, err := resolveUserModelProvider(r.Context(), db, userID, userName, parentID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			common.ReplyErr(w, "model provider not found", http.StatusNotFound)
@@ -181,10 +178,7 @@ func ListGroupModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var parent orm.UserModelProvider
-	err := db.WithContext(r.Context()).
-		Where("id = ? AND create_user_id = ? AND deleted_at IS NULL", parentID, userID).
-		Take(&parent).Error
+	parent, err := resolveUserModelProvider(r.Context(), db, userID, "", parentID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			common.ReplyErr(w, "model provider not found", http.StatusNotFound)
@@ -365,10 +359,7 @@ func DeleteGroupModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var parent orm.UserModelProvider
-	err := db.WithContext(r.Context()).
-		Where("id = ? AND create_user_id = ? AND deleted_at IS NULL", parentID, userID).
-		Take(&parent).Error
+	parent, err := resolveUserModelProvider(r.Context(), db, userID, "", parentID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			common.ReplyErr(w, "model provider not found", http.StatusNotFound)
