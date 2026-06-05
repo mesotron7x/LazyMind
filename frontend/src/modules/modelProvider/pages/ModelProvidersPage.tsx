@@ -172,6 +172,21 @@ const builtInProviders: ProviderOption[] = [
       { id: "deepseek-reasoner", name: "deepseek-reasoner", capability: "LLM_SELF_EVOLUTION", builtIn: true, enabled: true },
     ],
   },
+  {
+    id: "siliconflow",
+    name: "SiliconFlow",
+    brand: "SF",
+    headline: "Efficient model API aggregation and acceleration platform with broad Qwen-compatible model access.",
+    source: "siliconflow",
+    baseUrl: "https://api.siliconflow.cn/v1/",
+    capabilities: ["LLM_CHAT", "EMBEDDING", "VLM", "RERANK"],
+    models: [
+      { id: "qwen2-5-72b-instruct", name: "Qwen/Qwen2.5-72B-Instruct", capability: "LLM_CHAT", builtIn: true, enabled: true },
+      { id: "bge-m3", name: "BAAI/bge-m3", capability: "EMBEDDING", builtIn: true, enabled: true },
+      { id: "qwen2-vl-72b-instruct", name: "Qwen/Qwen2-VL-72B-Instruct", capability: "VLM", builtIn: true, enabled: true },
+      { id: "bge-reranker-v2-m3", name: "BAAI/bge-reranker-v2-m3", capability: "RERANK", builtIn: true, enabled: true },
+    ],
+  },
 ];
 
 function createConnectionGroup(provider: ProviderOption, overrides: Partial<ProviderConnectionGroup> = {}): ProviderConnectionGroup {

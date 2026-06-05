@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"lazymind/core/common"
 	"lazymind/core/common/orm"
+	"lazymind/core/log"
 	"lazymind/core/store"
 )
 
@@ -56,6 +58,7 @@ func ListUserProviders(w http.ResponseWriter, r *http.Request) {
 
 	userName := strings.TrimSpace(store.UserName(r))
 	if err := syncUserProvidersFromDefaults(r.Context(), db, userID, userName); err != nil {
+		log.Logger.Error().Err(err).Str("user_id", userID).Msg("sync model providers failed")
 		common.ReplyErr(w, "sync model providers failed", http.StatusInternalServerError)
 		return
 	}
@@ -215,61 +218,57 @@ func buildListItems(ctx context.Context, db *gorm.DB, rows []orm.UserModelProvid
 	return out
 }
 
-// syncUserProvidersFromDefaults copies missing default_model_providers rows into
-// user_model_providers for the given user (matched by default_model_provider_id).
-// It also syncs category and capabilities for already-existing rows.
+// syncUserProvidersFromDefaults refreshes the user's provider rows from the
+// default catalog. Existing rows are updated in-place by the unique
+// (create_user_id, default_model_provider_id) key so soft-deleted or partially
+// synced rows do not break the whole provider page.
 func syncUserProvidersFromDefaults(ctx context.Context, db *gorm.DB, userID, userName string) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var existing []orm.UserModelProvider
-		if err := tx.Where("create_user_id = ? AND deleted_at IS NULL", userID).Find(&existing).Error; err != nil {
-			return err
-		}
-		existingByDefault := make(map[string]*orm.UserModelProvider, len(existing))
-		for i := range existing {
-			existingByDefault[existing[i].DefaultModelProviderID] = &existing[i]
-		}
-
 		var defs []orm.DefaultModelProvider
-		if err := tx.Where("deleted_at IS NULL").Find(&defs).Error; err != nil {
+		if err := tx.Model(&orm.DefaultModelProvider{}).Where("deleted_at IS NULL").Find(&defs).Error; err != nil {
 			return err
+		}
+		if len(defs) == 0 {
+			return nil
 		}
 
 		now := time.Now()
-		var toCreate []orm.UserModelProvider
+		batch := make([]orm.UserModelProvider, len(defs))
 		for i := range defs {
 			d := defs[i]
-			if row, ok := existingByDefault[d.ID]; ok {
-				// Sync category / capabilities from defaults if changed.
-				if row.Category != d.Category || row.Capabilities != d.Capabilities {
-					_ = tx.Model(row).Updates(map[string]interface{}{
-						"category":     d.Category,
-						"capabilities": d.Capabilities,
-						"updated_at":   now,
-					})
-				}
-			} else {
-				toCreate = append(toCreate, orm.UserModelProvider{
-					ID:                     common.GenerateID(),
-					DefaultModelProviderID: d.ID,
-					Name:                   d.Name,
-					Description:            d.Description,
-					BaseURL:                d.BaseURL,
-					Category:               d.Category,
-					Capabilities:           d.Capabilities,
-					BaseModel: orm.BaseModel{
-						CreateUserID:   userID,
-						CreateUserName: userName,
-						CreatedAt:      now,
-						UpdatedAt:      now,
-						DeletedAt:      nil,
-					},
-				})
+			batch[i] = orm.UserModelProvider{
+				ID:                     common.GenerateID(),
+				DefaultModelProviderID: d.ID,
+				Name:                   d.Name,
+				Description:            d.Description,
+				BaseURL:                d.BaseURL,
+				Category:               d.Category,
+				Capabilities:           d.Capabilities,
+				BaseModel: orm.BaseModel{
+					CreateUserID:   userID,
+					CreateUserName: userName,
+					CreatedAt:      now,
+					UpdatedAt:      now,
+					DeletedAt:      nil,
+				},
 			}
 		}
-		if len(toCreate) == 0 {
-			return nil
-		}
-		return tx.Create(&toCreate).Error
+		return tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "create_user_id"},
+				{Name: "default_model_provider_id"},
+			},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"name",
+				"description",
+				"base_url",
+				"category",
+				"capabilities",
+				"create_user_name",
+				"updated_at",
+				"deleted_at",
+			}),
+		}).Create(&batch).Error
 	})
 }
 

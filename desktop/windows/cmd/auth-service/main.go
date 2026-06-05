@@ -116,7 +116,7 @@ func me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResponse{Data: map[string]any{
 		"id":       defaultAssistant.ID,
 		"username": defaultAssistant.Username,
-		"role":     "user",
+		"role":     "system-admin",
 	}})
 }
 
@@ -354,7 +354,7 @@ func token() string {
 	payload := base64.RawURLEncoding.EncodeToString(mustJSON(map[string]any{
 		"sub":      defaultAssistant.ID,
 		"username": defaultAssistant.Username,
-		"role":     "user",
+		"role":     "system-admin",
 		"exp":      time.Now().Add(24 * time.Hour).Unix(),
 	}))
 	return header + "." + payload + "."

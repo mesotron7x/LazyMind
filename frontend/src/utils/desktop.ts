@@ -40,7 +40,7 @@ export function syncDesktopAssistantAuth(
     token: nextToken,
     username: assistant.username,
     userId: assistant.id,
-    role: 'user',
+    role: 'system-admin',
     loginType: 'desktop',
     displayName: assistant.displayName || assistant.username,
     dynamic: false,

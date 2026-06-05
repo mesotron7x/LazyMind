@@ -1,6 +1,7 @@
 package modelprovider
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -27,6 +28,12 @@ func setupListProviderTestDB(t *testing.T) *gorm.DB {
 		&orm.UserModelProviderGroup{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS uk_user_model_providers_user_default_provider
+		ON user_model_providers (create_user_id, default_model_provider_id)
+	`).Error; err != nil {
+		t.Fatalf("create provider unique index: %v", err)
 	}
 	return db
 }
@@ -245,5 +252,136 @@ func TestBuildListItemsOmitsMinerULocalPresetWithoutConfiguredURL(t *testing.T) 
 	}
 	if items[0].BaseURLPresets[0].Key != "official" {
 		t.Fatalf("expected official preset, got %#v", items[0].BaseURLPresets)
+	}
+}
+
+func TestSyncUserProvidersFromDefaultsIncludesSiliconFlow(t *testing.T) {
+	db := setupListProviderTestDB(t)
+	seedDefaultProviders(t, db, []orm.DefaultModelProvider{
+		defaultProvider("provider-qwen", "Qwen", "https://dashscope.aliyuncs.com/"),
+		defaultProvider("provider-siliconflow", "SiliconFlow", "https://api.siliconflow.cn/v1/"),
+	})
+
+	if err := syncUserProvidersFromDefaults(context.Background(), db, "user-1", "User 1"); err != nil {
+		t.Fatalf("sync providers: %v", err)
+	}
+
+	var rows []orm.UserModelProvider
+	if err := db.Where("create_user_id = ? AND deleted_at IS NULL", "user-1").Find(&rows).Error; err != nil {
+		t.Fatalf("list user providers: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 synced providers, got %d", len(rows))
+	}
+
+	var siliconFlow orm.UserModelProvider
+	if err := db.Where("create_user_id = ? AND name = ? AND deleted_at IS NULL", "user-1", "SiliconFlow").Take(&siliconFlow).Error; err != nil {
+		t.Fatalf("expected SiliconFlow provider to be synced: %v", err)
+	}
+	if siliconFlow.BaseURL != "https://api.siliconflow.cn/v1/" {
+		t.Fatalf("unexpected SiliconFlow base_url: %s", siliconFlow.BaseURL)
+	}
+}
+
+func TestSyncUserProvidersFromDefaultsRestoresSoftDeletedProvider(t *testing.T) {
+	db := setupListProviderTestDB(t)
+	provider := defaultProvider("provider-siliconflow", "SiliconFlow", "https://api.siliconflow.cn/v1/")
+	seedDefaultProviders(t, db, []orm.DefaultModelProvider{provider})
+
+	deletedAt := time.Now().UTC()
+	existing := orm.UserModelProvider{
+		ID:                     "existing-user-provider",
+		DefaultModelProviderID: provider.ID,
+		Name:                   "Old SiliconFlow",
+		Description:            "stale",
+		BaseURL:                "https://old.example/v1/",
+		Category:               "model",
+		Capabilities:           "has_models",
+		BaseModel: orm.BaseModel{
+			CreateUserID:   "user-1",
+			CreateUserName: "Old User",
+			CreatedAt:      deletedAt.Add(-time.Hour),
+			UpdatedAt:      deletedAt.Add(-time.Hour),
+			DeletedAt:      &deletedAt,
+		},
+	}
+	if err := db.Create(&existing).Error; err != nil {
+		t.Fatalf("seed soft-deleted provider: %v", err)
+	}
+
+	if err := syncUserProvidersFromDefaults(context.Background(), db, "user-1", "User 1"); err != nil {
+		t.Fatalf("sync providers: %v", err)
+	}
+
+	var row orm.UserModelProvider
+	if err := db.Where("create_user_id = ? AND default_model_provider_id = ?", "user-1", provider.ID).Take(&row).Error; err != nil {
+		t.Fatalf("load restored provider: %v", err)
+	}
+	if row.ID != existing.ID {
+		t.Fatalf("expected existing row to be restored, got id %s", row.ID)
+	}
+	if row.DeletedAt != nil {
+		t.Fatalf("expected deleted_at to be cleared")
+	}
+	if row.Name != provider.Name || row.BaseURL != provider.BaseURL || row.CreateUserName != "User 1" {
+		t.Fatalf("provider was not refreshed: %#v", row)
+	}
+}
+
+func TestSyncUserProvidersFromDefaultsRefreshesCatalogFields(t *testing.T) {
+	db := setupListProviderTestDB(t)
+	provider := defaultProvider("provider-siliconflow", "SiliconFlow", "https://api.siliconflow.cn/v1/")
+	seedDefaultProviders(t, db, []orm.DefaultModelProvider{provider})
+
+	if err := syncUserProvidersFromDefaults(context.Background(), db, "user-1", "User 1"); err != nil {
+		t.Fatalf("initial sync providers: %v", err)
+	}
+
+	if err := db.Model(&orm.DefaultModelProvider{}).
+		Where("id = ?", provider.ID).
+		Updates(map[string]any{
+			"description":  "updated description",
+			"base_url":     "https://updated.example/v1/",
+			"category":     "search",
+			"capabilities": "custom_base_url",
+		}).Error; err != nil {
+		t.Fatalf("update default provider: %v", err)
+	}
+
+	if err := syncUserProvidersFromDefaults(context.Background(), db, "user-1", "User Renamed"); err != nil {
+		t.Fatalf("resync providers: %v", err)
+	}
+
+	var row orm.UserModelProvider
+	if err := db.Where("create_user_id = ? AND default_model_provider_id = ?", "user-1", provider.ID).Take(&row).Error; err != nil {
+		t.Fatalf("load refreshed provider: %v", err)
+	}
+	if row.Description != "updated description" ||
+		row.BaseURL != "https://updated.example/v1/" ||
+		row.Category != "search" ||
+		row.Capabilities != "custom_base_url" ||
+		row.CreateUserName != "User Renamed" {
+		t.Fatalf("provider did not refresh catalog fields: %#v", row)
+	}
+}
+
+func defaultProvider(id, name, baseURL string) orm.DefaultModelProvider {
+	now := time.Now().UTC()
+	return orm.DefaultModelProvider{
+		ID:           id,
+		Name:         name,
+		Description:  name + " description",
+		BaseURL:      baseURL,
+		Category:     "model",
+		Capabilities: "multi_group,custom_base_url,has_models",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+}
+
+func seedDefaultProviders(t *testing.T, db *gorm.DB, providers []orm.DefaultModelProvider) {
+	t.Helper()
+	if err := db.Create(&providers).Error; err != nil {
+		t.Fatalf("seed default providers: %v", err)
 	}
 }
