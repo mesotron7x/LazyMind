@@ -78,7 +78,7 @@ func upsertDefaultProvider(tx *gorm.DB, now time.Time, category string, caps []s
 
 	baseURL := normalizeBaseURL(item.BaseURL)
 	var row orm.DefaultModelProvider
-	err := tx.Where("name = ?", name).Take(&row).Error
+	err := tx.Select("id").Where("name = ?", name).Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		row = orm.DefaultModelProvider{
 			ID:           common.GenerateID(),
@@ -116,7 +116,9 @@ func upsertDefaultModel(tx *gorm.DB, now time.Time, providerID, providerName str
 	}
 
 	var row orm.DefaultModel
-	err := tx.Where("default_model_provider_id = ? AND name = ?", providerID, name).Take(&row).Error
+	err := tx.Select("id").
+		Where("default_model_provider_id = ? AND name = ?", providerID, name).
+		Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		row = orm.DefaultModel{
 			ID:                     common.GenerateID(),

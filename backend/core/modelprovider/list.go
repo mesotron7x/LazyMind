@@ -225,7 +225,10 @@ func buildListItems(ctx context.Context, db *gorm.DB, rows []orm.UserModelProvid
 func syncUserProvidersFromDefaults(ctx context.Context, db *gorm.DB, userID, userName string) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var defs []orm.DefaultModelProvider
-		if err := tx.Model(&orm.DefaultModelProvider{}).Where("deleted_at IS NULL").Find(&defs).Error; err != nil {
+		if err := tx.Model(&orm.DefaultModelProvider{}).
+			Select("id, name, description, base_url, category, capabilities").
+			Where("deleted_at IS NULL").
+			Find(&defs).Error; err != nil {
 			return err
 		}
 		if len(defs) == 0 {
