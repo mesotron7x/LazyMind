@@ -577,8 +577,9 @@ windows-desktop:
 	@cp -r backend/core/migrations "$(LAZYMIND_OUTPUT_DIR)/bin/migrations"
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/config"
 	@cp backend/core/config/model_catalog.yaml "$(LAZYMIND_OUTPUT_DIR)/bin/config/model_catalog.yaml"
+	@cp backend/core/config/datasource_catalog.yaml "$(LAZYMIND_OUTPUT_DIR)/bin/config/datasource_catalog.yaml"
 	@echo "Building scan-control-plane..."
-	@cd backend/scan-control-plane && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(abspath $(LAZYMIND_OUTPUT_DIR))/bin/scan-control-plane.exe" ./cmd
+	@cd backend/scan-control-plane && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(abspath $(LAZYMIND_OUTPUT_DIR))/bin/scan-control-plane.exe" ./cmd/scan-control-plane
 	@echo "Building file-watcher..."
 	@cd backend/file-watcher && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -o "$(abspath $(LAZYMIND_OUTPUT_DIR))/bin/file-watcher.exe" ./cmd
 	@mkdir -p "$(LAZYMIND_OUTPUT_DIR)/bin/auth-service"
