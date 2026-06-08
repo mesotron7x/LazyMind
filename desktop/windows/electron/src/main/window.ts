@@ -55,6 +55,7 @@ export function createSplashWindow(): BrowserWindow {
     resizable: false,
     skipTaskbar: true,
     webPreferences: {
+      preload: PRELOAD_PATH,
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
