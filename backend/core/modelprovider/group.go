@@ -44,6 +44,15 @@ type groupListResponse struct {
 	Groups []groupListItem `json:"groups"`
 }
 
+var providerGroupSelectColumns = []string{
+	"id",
+	"user_model_provider_id",
+	"name",
+	"base_url",
+	"api_key",
+	"is_verified",
+}
+
 // ListGroups returns active connection groups for the given user model provider (path model_provider_id).
 func ListGroups(w http.ResponseWriter, r *http.Request) {
 	db := store.DB()
@@ -75,6 +84,7 @@ func ListGroups(w http.ResponseWriter, r *http.Request) {
 
 	var rows []orm.UserModelProviderGroup
 	if err := db.WithContext(r.Context()).
+		Select(providerGroupSelectColumns).
 		Where("user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", parent.ID, userID).
 		Order("name ASC").
 		Find(&rows).Error; err != nil {
@@ -181,8 +191,9 @@ func CreateGroup(w http.ResponseWriter, r *http.Request) {
 				http.StatusBadGateway,
 			)
 			return
+		} else {
+			checkData = &CheckModelProviderData{Success: true, Message: checkResult.Message}
 		}
-		checkData = &CheckModelProviderData{Success: true, Message: checkResult.Message}
 	}
 
 	now := time.Now()
@@ -267,6 +278,7 @@ func UpdateGroup(w http.ResponseWriter, r *http.Request) {
 
 	var row orm.UserModelProviderGroup
 	err = db.WithContext(r.Context()).
+		Select(providerGroupSelectColumns).
 		Where("id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, parent.ID, userID).
 		Take(&row).Error
 	if err != nil {
@@ -334,9 +346,10 @@ func UpdateGroup(w http.ResponseWriter, r *http.Request) {
 				http.StatusBadGateway,
 			)
 			return
+		} else {
+			checkData = &CheckModelProviderData{Success: true, Message: checkResult.Message}
+			updates["is_verified"] = true
 		}
-		checkData = &CheckModelProviderData{Success: true, Message: checkResult.Message}
-		updates["is_verified"] = true
 	}
 
 	// verify=true: run connectivity check before persisting; on success mark is_verified=true atomically.
@@ -411,6 +424,7 @@ func DeleteGroup(w http.ResponseWriter, r *http.Request) {
 
 	var row orm.UserModelProviderGroup
 	err = db.WithContext(r.Context()).
+		Select(providerGroupSelectColumns).
 		Where("id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, parent.ID, userID).
 		Take(&row).Error
 	if err != nil {
@@ -426,6 +440,7 @@ func DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	// collect IDs for user_selected_models cleanup.
 	var groupModels []orm.UserModelProviderGroupModel
 	if err := db.WithContext(r.Context()).
+		Select(groupModelSelectColumns).
 		Where("user_model_provider_group_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, userID).
 		Find(&groupModels).Error; err != nil {
 		common.ReplyErr(w, "query group models failed", http.StatusInternalServerError)
@@ -493,6 +508,7 @@ func defaultBaseURL(ctx context.Context, db *gorm.DB, defaultProviderID string) 
 	}
 	var catalog orm.DefaultModelProvider
 	if err := db.WithContext(ctx).
+		Select("base_url").
 		Where("id = ? AND deleted_at IS NULL", defaultProviderID).
 		Take(&catalog).Error; err != nil {
 		return "", false
@@ -526,6 +542,7 @@ func seedGroupModelsFromDefaults(
 
 	var catalog orm.DefaultModelProvider
 	err := tx.WithContext(ctx).
+		Select("base_url").
 		Where("id = ? AND deleted_at IS NULL", parent.DefaultModelProviderID).
 		Take(&catalog).Error
 	if err != nil {
@@ -539,6 +556,7 @@ func seedGroupModelsFromDefaults(
 	}
 	var defs []orm.DefaultModel
 	if err := tx.WithContext(ctx).
+		Select("provider_name", "name", "model_type").
 		Where("default_model_provider_id = ? AND deleted_at IS NULL", parent.DefaultModelProviderID).
 		Find(&defs).Error; err != nil {
 		return err
@@ -623,10 +641,7 @@ func AddKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var parent orm.UserModelProvider
-	err := db.WithContext(r.Context()).
-		Where("id = ? AND create_user_id = ? AND deleted_at IS NULL", parentID, userID).
-		Take(&parent).Error
+	parent, err := resolveUserModelProvider(r.Context(), db, userID, "", parentID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			common.ReplyErr(w, "model provider not found", http.StatusNotFound)
@@ -638,6 +653,7 @@ func AddKey(w http.ResponseWriter, r *http.Request) {
 
 	var row orm.UserModelProviderGroup
 	err = db.WithContext(r.Context()).
+		Select(providerGroupSelectColumns).
 		Where("id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, parent.ID, userID).
 		Take(&row).Error
 	if err != nil {
@@ -717,10 +733,7 @@ func RemoveKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var parent orm.UserModelProvider
-	err := db.WithContext(r.Context()).
-		Where("id = ? AND create_user_id = ? AND deleted_at IS NULL", parentID, userID).
-		Take(&parent).Error
+	parent, err := resolveUserModelProvider(r.Context(), db, userID, "", parentID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			common.ReplyErr(w, "model provider not found", http.StatusNotFound)
@@ -732,6 +745,7 @@ func RemoveKey(w http.ResponseWriter, r *http.Request) {
 
 	var row orm.UserModelProviderGroup
 	err = db.WithContext(r.Context()).
+		Select(providerGroupSelectColumns).
 		Where("id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, parent.ID, userID).
 		Take(&row).Error
 	if err != nil {

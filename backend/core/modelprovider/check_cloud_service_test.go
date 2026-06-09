@@ -266,6 +266,9 @@ func TestShouldVerifyCloudServiceOnSaveIncludesSearchProviders(t *testing.T) {
 	if !shouldVerifyCloudServiceOnSave("ocr", "PaddleOCR") {
 		t.Fatal("expected supported OCR providers to be verified on save")
 	}
+	if !shouldVerifyCloudServiceOnSave("model", "SiliconFlow") {
+		t.Fatal("expected SiliconFlow model provider to be verified on save")
+	}
 	if shouldVerifyCloudServiceOnSave("model", "Qwen") {
 		t.Fatal("did not expect model providers to use cloud service save verification")
 	}

@@ -394,6 +394,12 @@ func buildChatRequestBody(convID, sessionID, query string, histories []orm.ChatH
 			body["user_preference"] = resourceContext.UserPreference
 		}
 	}
+	if availableTools, ok := explicitStringSlice(raw, "available_tools"); ok {
+		body["available_tools"] = availableTools
+	}
+	if availableSkills, ok := explicitStringSlice(raw, "available_skills"); ok {
+		body["available_skills"] = availableSkills
+	}
 	if body["filters"] == nil {
 		conv, _ := raw["conversation"].(map[string]any)
 		if conv != nil {
@@ -415,6 +421,34 @@ func buildChatRequestBody(convID, sessionID, query string, histories []orm.ChatH
 		}
 	}
 	return body
+}
+
+func explicitStringSlice(raw map[string]any, key string) ([]string, bool) {
+	value, ok := raw[key]
+	if !ok {
+		return nil, false
+	}
+	if rawStrings, ok := value.([]string); ok {
+		out := make([]string, 0, len(rawStrings))
+		for _, item := range rawStrings {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out, true
+	}
+	rawItems, ok := value.([]any)
+	if !ok {
+		return nil, true
+	}
+	out := make([]string, 0, len(rawItems))
+	for _, item := range rawItems {
+		s, _ := item.(string)
+		if trimmed := strings.TrimSpace(s); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out, true
 }
 
 func resolveUseMemory(raw map[string]any, resourceContext *evolution.ChatResourceContext) bool {

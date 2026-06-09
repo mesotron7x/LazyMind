@@ -101,8 +101,8 @@ CREATE TABLE IF NOT EXISTS chat_histories (
     expected_answer TEXT,
     ext TEXT,
     version TEXT DEFAULT '2.3',
-    create_time TEXT NOT NULL,
-    update_time TEXT NOT NULL
+    create_time DATETIME NOT NULL,
+    update_time DATETIME NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -117,9 +117,9 @@ CREATE TABLE IF NOT EXISTS conversations (
     chat_times INTEGER NOT NULL DEFAULT 0,
     create_user_id TEXT NOT NULL,
     create_user_name TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    deleted_at TEXT
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    deleted_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS dataset_members (

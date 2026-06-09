@@ -548,6 +548,7 @@ export default function ModelProviderPage() {
   const watchedProviderBaseUrl = Form.useWatch("baseUrl", providerConfigForm);
   const providerSearchRequestIdRef = useRef(0);
   const initialProvidersLoadedRef = useRef(false);
+  const initialProvidersLoadStartedRef = useRef(false);
   const localizedFallbacks = useMemo(() => createModelProviderFallbacks(t), [i18n.language, t]);
   const getCapabilityLabel = useCallback((capability: ModelCapability) => t(capabilityLabelKeys[capability]), [t]);
   const configProvider = configModal?.provider || null;
@@ -635,6 +636,10 @@ export default function ModelProviderPage() {
   };
 
   useEffect(() => {
+    if (initialProvidersLoadStartedRef.current) {
+      return;
+    }
+    initialProvidersLoadStartedRef.current = true;
     void loadModelProviders();
   }, []);
 

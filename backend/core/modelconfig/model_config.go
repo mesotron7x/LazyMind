@@ -122,7 +122,7 @@ func LoadAdminEmbedConfig(ctx context.Context, db *gorm.DB) (map[string]any, err
 		return nil, nil
 	}
 	cfg := map[string]any{
-		"source":   strings.ToLower(strings.TrimSpace(row.ProviderName)),
+		"source":   CanonicalProviderSource(row.ProviderName),
 		"model":    row.ModelName,
 		"base_url": row.BaseURL,
 		"api_key":  row.APIKey,
@@ -134,7 +134,7 @@ func BuildLLMConfig(rows []SelectedRuntimeModel) map[string]any {
 	out := map[string]any{}
 	for _, row := range rows {
 		cfg := map[string]any{
-			"source":   strings.ToLower(strings.TrimSpace(row.ProviderName)),
+			"source":   CanonicalProviderSource(row.ProviderName),
 			"model":    row.ModelName,
 			"base_url": row.BaseURL,
 			"api_key":  row.APIKey,
@@ -145,6 +145,27 @@ func BuildLLMConfig(rows []SelectedRuntimeModel) map[string]any {
 		return nil
 	}
 	return out
+}
+
+func CanonicalProviderSource(providerName string) string {
+	switch normalizeProviderName(providerName) {
+	case "siliconflow":
+		return "siliconflow"
+	default:
+		return strings.ToLower(strings.TrimSpace(providerName))
+	}
+}
+
+func normalizeProviderName(value string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		if r >= 'A' && r <= 'Z' {
+			return r + ('a' - 'A')
+		}
+		return -1
+	}, value)
 }
 
 func SummarizeLLMConfigForLog(config map[string]any) string {

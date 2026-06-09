@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"lazymind/core/common"
 	"lazymind/core/common/orm"
@@ -39,6 +38,18 @@ type listResponse struct {
 }
 
 const defaultProviderCategory = "model"
+
+var providerListSelectColumns = []string{
+	"id",
+	"default_model_provider_id",
+	"name",
+	"description",
+	"base_url",
+	"category",
+	"capabilities",
+	"create_user_id",
+	"create_user_name",
+}
 
 // ListUserProviders returns the current user's model providers. Missing catalog
 // rows are copied from default_model_providers on each request (incremental sync).
@@ -86,7 +97,7 @@ func ListUserProviders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rows []orm.UserModelProvider
-	if err := q.Order("name ASC").Find(&rows).Error; err != nil {
+	if err := q.Select(providerListSelectColumns).Order("name ASC").Find(&rows).Error; err != nil {
 		common.ReplyErr(w, "list model providers failed", http.StatusInternalServerError)
 		return
 	}
@@ -123,6 +134,7 @@ func ListUserProvidersWithGroups(w http.ResponseWriter, r *http.Request) {
 
 	var rows []orm.UserModelProvider
 	if err := db.WithContext(r.Context()).
+		Select(providerListSelectColumns).
 		Where("id IN ? AND create_user_id = ? AND deleted_at IS NULL", providerIDs, userID).
 		Order("name ASC").
 		Find(&rows).Error; err != nil {
@@ -223,6 +235,10 @@ func buildListItems(ctx context.Context, db *gorm.DB, rows []orm.UserModelProvid
 // (create_user_id, default_model_provider_id) key so soft-deleted or partially
 // synced rows do not break the whole provider page.
 func syncUserProvidersFromDefaults(ctx context.Context, db *gorm.DB, userID, userName string) error {
+	if err := ensureProviderListSchema(ctx, db); err != nil {
+		return err
+	}
+
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var defs []orm.DefaultModelProvider
 		if err := tx.Model(&orm.DefaultModelProvider{}).
@@ -236,43 +252,111 @@ func syncUserProvidersFromDefaults(ctx context.Context, db *gorm.DB, userID, use
 		}
 
 		now := time.Now()
-		batch := make([]orm.UserModelProvider, len(defs))
 		for i := range defs {
 			d := defs[i]
-			batch[i] = orm.UserModelProvider{
-				ID:                     common.GenerateID(),
-				DefaultModelProviderID: d.ID,
-				Name:                   d.Name,
-				Description:            d.Description,
-				BaseURL:                d.BaseURL,
-				Category:               d.Category,
-				Capabilities:           d.Capabilities,
-				BaseModel: orm.BaseModel{
-					CreateUserID:   userID,
-					CreateUserName: userName,
-					CreatedAt:      now,
-					UpdatedAt:      now,
-					DeletedAt:      nil,
-				},
+			if err := syncOneUserProviderFromDefault(tx, userID, userName, now, d); err != nil {
+				return err
 			}
 		}
-		return tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "create_user_id"},
-				{Name: "default_model_provider_id"},
-			},
-			DoUpdates: clause.AssignmentColumns([]string{
-				"name",
-				"description",
-				"base_url",
-				"category",
-				"capabilities",
-				"create_user_name",
-				"updated_at",
-				"deleted_at",
-			}),
-		}).Create(&batch).Error
+		return nil
 	})
+}
+
+func ensureProviderListSchema(ctx context.Context, db *gorm.DB) error {
+	if db == nil {
+		return nil
+	}
+	migrator := db.WithContext(ctx).Migrator()
+	for _, item := range []struct {
+		model any
+		field string
+	}{
+		{model: &orm.DefaultModelProvider{}, field: "Category"},
+		{model: &orm.DefaultModelProvider{}, field: "Capabilities"},
+		{model: &orm.UserModelProvider{}, field: "Category"},
+		{model: &orm.UserModelProvider{}, field: "Capabilities"},
+	} {
+		if !migrator.HasColumn(item.model, item.field) {
+			if err := migrator.AddColumn(item.model, item.field); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func syncOneUserProviderFromDefault(tx *gorm.DB, userID, userName string, now time.Time, d orm.DefaultModelProvider) error {
+	updates := map[string]any{
+		"name":             d.Name,
+		"description":      d.Description,
+		"base_url":         d.BaseURL,
+		"category":         d.Category,
+		"capabilities":     d.Capabilities,
+		"create_user_name": userName,
+		"updated_at":       now,
+		"deleted_at":       nil,
+	}
+
+	var rows []orm.UserModelProvider
+	if err := tx.Table(orm.UserModelProvider{}.TableName()).
+		Select("id").
+		Where("create_user_id = ? AND default_model_provider_id = ?", userID, d.ID).
+		Order("CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END, updated_at DESC").
+		Scan(&rows).Error; err != nil {
+		return err
+	}
+	if len(rows) > 0 {
+		keep := rows[0]
+		if err := tx.Unscoped().Model(&orm.UserModelProvider{}).
+			Where("id = ?", keep.ID).
+			Updates(updates).Error; err != nil {
+			return err
+		}
+		if len(rows) > 1 {
+			extraIDs := make([]string, 0, len(rows)-1)
+			for _, row := range rows[1:] {
+				extraIDs = append(extraIDs, row.ID)
+			}
+			if err := tx.Unscoped().Model(&orm.UserModelProvider{}).
+				Where("id IN ?", extraIDs).
+				Updates(map[string]any{"deleted_at": now, "updated_at": now}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	row := orm.UserModelProvider{
+		ID:                     common.GenerateID(),
+		DefaultModelProviderID: d.ID,
+		Name:                   d.Name,
+		Description:            d.Description,
+		BaseURL:                d.BaseURL,
+		Category:               d.Category,
+		Capabilities:           d.Capabilities,
+		BaseModel: orm.BaseModel{
+			CreateUserID:   userID,
+			CreateUserName: userName,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+			DeletedAt:      nil,
+		},
+	}
+	if err := tx.Create(&row).Error; err != nil {
+		var existing struct {
+			ID string
+		}
+		if lookupErr := tx.Table(orm.UserModelProvider{}.TableName()).
+			Select("id").
+			Where("create_user_id = ? AND default_model_provider_id = ?", userID, d.ID).
+			Take(&existing).Error; lookupErr == nil {
+			return tx.Unscoped().Model(&orm.UserModelProvider{}).
+				Where("id = ?", existing.ID).
+				Updates(updates).Error
+		}
+		return err
+	}
+	return nil
 }
 
 // splitCapabilities splits a comma-separated capabilities string into a slice.

@@ -186,6 +186,7 @@ func SetSelectedModels(w http.ResponseWriter, r *http.Request) {
 	var models []orm.UserModelProviderGroupModel
 	if len(modelIDs) > 0 {
 		if err := db.WithContext(r.Context()).
+			Select(groupModelSelectColumns).
 			Where("id IN ? AND create_user_id = ? AND deleted_at IS NULL", modelIDs, userID).
 			Find(&models).Error; err != nil {
 			common.ReplyErr(w, "query models failed", http.StatusInternalServerError)

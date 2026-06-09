@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"lazymind/core/common/orm"
@@ -14,10 +13,11 @@ import (
 func setupToolConfigTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	dbName := t.Name() + "_" + time.Now().Format("150405.000000000")
-	db, err := gorm.Open(sqlite.Open("file:"+dbName+"?mode=memory&cache=shared"), &gorm.Config{})
+	dbConn, err := orm.Connect(orm.DriverSQLite, "file:"+dbName+"?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	db := dbConn.DB
 	if err := db.AutoMigrate(
 		&orm.UserModelProvider{},
 		&orm.UserModelProviderGroup{},

@@ -20,6 +20,7 @@ func resolveUserModelProvider(ctx context.Context, db *gorm.DB, userID, userName
 	}
 
 	err := db.WithContext(ctx).
+		Select(providerListSelectColumns).
 		Where("id = ? AND create_user_id = ? AND deleted_at IS NULL", ref, userID).
 		Take(&row).Error
 	if err == nil {
@@ -36,6 +37,7 @@ func resolveUserModelProvider(ctx context.Context, db *gorm.DB, userID, userName
 	}
 
 	err = db.WithContext(ctx).
+		Select(providerListSelectColumns).
 		Where("id = ? AND create_user_id = ? AND deleted_at IS NULL", ref, userID).
 		Take(&row).Error
 	if err == nil {
@@ -47,6 +49,7 @@ func resolveUserModelProvider(ctx context.Context, db *gorm.DB, userID, userName
 
 	var rows []orm.UserModelProvider
 	if err := db.WithContext(ctx).
+		Select(providerListSelectColumns).
 		Where("create_user_id = ? AND deleted_at IS NULL", userID).
 		Find(&rows).Error; err != nil {
 		return row, err

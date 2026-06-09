@@ -142,6 +142,45 @@ func TestBuildChatRequestBodyAddsEvolutionContext(t *testing.T) {
 	}
 }
 
+func TestBuildChatRequestBodyRespectsExplicitEmptyToolsAndSkills(t *testing.T) {
+	ctx := &evolution.ChatResourceContext{
+		AvailableTools:     []string{"all"},
+		AvailableSkills:    []string{"coding/git-workflow"},
+		UsePersonalization: true,
+	}
+	body := buildChatRequestBody("conv-1", "session-1", "hello", nil, map[string]any{
+		"available_tools":  []any{},
+		"available_skills": []any{},
+	}, ctx, "user-1")
+
+	tools, ok := body["available_tools"].([]string)
+	if !ok {
+		t.Fatalf("expected available_tools []string, got %T", body["available_tools"])
+	}
+	if len(tools) != 0 {
+		t.Fatalf("expected explicit empty available_tools, got %#v", tools)
+	}
+	skills, ok := body["available_skills"].([]string)
+	if !ok {
+		t.Fatalf("expected available_skills []string, got %T", body["available_skills"])
+	}
+	if len(skills) != 0 {
+		t.Fatalf("expected explicit empty available_skills, got %#v", skills)
+	}
+
+	req := buildLazyChatRequest(body)
+	encoded, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"available_tools":[]`) {
+		t.Fatalf("expected available_tools empty array in upstream JSON, got %s", encoded)
+	}
+	if !strings.Contains(string(encoded), `"available_skills":[]`) {
+		t.Fatalf("expected available_skills empty array in upstream JSON, got %s", encoded)
+	}
+}
+
 func TestBuildChatRequestBodySkipsMemoryAndPreferenceWhenPersonalizationDisabled(t *testing.T) {
 	ctx := &evolution.ChatResourceContext{
 		AvailableTools:     []string{"all"},
@@ -207,6 +246,11 @@ func TestGetConversationDetailReturnsStoredMultimodalInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect db: %v", err)
 	}
+	t.Cleanup(func() {
+		if sqlDB, err := db.DB.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 	if err := db.AutoMigrate(&orm.Conversation{}, &orm.ChatHistory{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
@@ -283,6 +327,11 @@ func TestGetConversationHistoryReturnsStoredMultimodalInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect db: %v", err)
 	}
+	t.Cleanup(func() {
+		if sqlDB, err := db.DB.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 	if err := db.AutoMigrate(&orm.Conversation{}, &orm.ChatHistory{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}

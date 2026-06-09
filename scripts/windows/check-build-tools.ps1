@@ -2,7 +2,8 @@ param(
     [string]$ToolchainRoot = (Join-Path $env:USERPROFILE ".lazymind\toolchains"),
     [string]$NodeMajor = "24",
     [string]$PnpmMajor = "10",
-    [string]$MinimumGoVersion = "1.25.0"
+    [string]$MinimumGoVersion = "1.25.0",
+    [string]$UvVersion = "0.11.18"
 )
 
 Set-StrictMode -Version Latest
@@ -145,6 +146,14 @@ function Test-GoVersion {
     return ($actual -ge $minimum)
 }
 
+function Test-UvVersion {
+    $version = Invoke-Version -Name "uv" -ArgumentList @("--version")
+    if (-not $version -or $version -notmatch "^uv\s+([0-9]+\.[0-9]+\.[0-9]+)") {
+        return $false
+    }
+    return ($Matches[1].Trim() -eq $UvVersion)
+}
+
 $isWindowsPlatform = ($env:OS -eq "Windows_NT")
 $isWindowsVariable = Get-Variable -Name IsWindows -ErrorAction SilentlyContinue
 if ($isWindowsVariable) {
@@ -164,9 +173,13 @@ $goDirs = Get-ChildItem -Path $ToolchainRoot -Directory -Filter "go*" -ErrorActi
     Sort-Object Name -Descending |
     ForEach-Object { Join-Path $_.FullName "bin" }
 $npmGlobalPrefix = Join-Path $ToolchainRoot "npm-global"
+$uvDirs = Get-ChildItem -Path $ToolchainRoot -Directory -Filter "uv-*" -ErrorAction SilentlyContinue |
+    Where-Object { Test-Path (Join-Path $_.FullName "uv.exe") } |
+    Sort-Object Name -Descending |
+    ForEach-Object { $_.FullName }
 
 Add-PathForCurrentProcess @($scoopShims, $scoopGitUsrBin)
-Add-PathForCurrentProcess @($nodeDirs + $goDirs + @($npmGlobalPrefix))
+Add-PathForCurrentProcess @($nodeDirs + $goDirs + $uvDirs + @($npmGlobalPrefix))
 
 $preferredNodeDir = $nodeDirs | Select-Object -First 1
 if ($preferredNodeDir) {
@@ -180,6 +193,10 @@ if ($preferredGoDir) {
 }
 Set-PreferredCommandPath "pnpm" (Join-Path $npmGlobalPrefix "pnpm.cmd")
 $script:PreferredPnpmScript = Join-Path $npmGlobalPrefix "node_modules\pnpm\bin\pnpm.cjs"
+$preferredUvDir = $uvDirs | Select-Object -First 1
+if ($preferredUvDir) {
+    Set-PreferredCommandPath "uv" (Join-Path $preferredUvDir "uv.exe")
+}
 
 $ok = $true
 $ok = (Write-ToolStatus "git") -and $ok
@@ -190,6 +207,7 @@ $ok = (Write-ToolStatus "node") -and $ok
 $ok = (Write-ToolStatus "npm") -and $ok
 $ok = (Write-ToolStatus "pnpm") -and $ok
 $ok = (Write-ToolStatus "go" @("version")) -and $ok
+$ok = (Write-ToolStatus "uv") -and $ok
 
 if (-not (Test-NodeVersion)) {
     Write-Host "node     INVALID expected Node.js $NodeMajor.x"
@@ -201,6 +219,10 @@ if (-not (Test-PnpmVersion)) {
 }
 if (-not (Test-GoVersion)) {
     Write-Host "go       INVALID expected Go >= $MinimumGoVersion"
+    $ok = $false
+}
+if (-not (Test-UvVersion)) {
+    Write-Host "uv       INVALID expected uv $UvVersion"
     $ok = $false
 }
 

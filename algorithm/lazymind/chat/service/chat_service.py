@@ -136,28 +136,30 @@ async def handle_chat(query: str, history: Optional[List[Dict[str, Any]]],
 
     llm = AutoModel(model='llm')
 
-    react_agent = lazyllm.tools.agent.ReactAgent(
-        llm=llm,
-        tools=[cfg.instance for cfg in active_configs],
-        max_retries=_cfg['max_retries'],
-        stream=True,
-        prompt=runtime_prompt,
-        skills=available_skills,
-        workspace=_cfg['agentic_workspace'],
-        keep_full_turns=_cfg['agentic_keep_full_turns'],
-        fs=FS,
-        skills_dir=_cfg['skill_fs_url'],
-        enable_builtin_tools=False,
-        force_summarize=True,
-        force_summarize_context=query,
-    )
+    chat_callable: Any = llm
+    if active_configs or available_skills:
+        chat_callable = lazyllm.tools.agent.ReactAgent(
+            llm=llm,
+            tools=[cfg.instance for cfg in active_configs],
+            max_retries=_cfg['max_retries'],
+            stream=True,
+            prompt=runtime_prompt,
+            skills=available_skills,
+            workspace=_cfg['agentic_workspace'],
+            keep_full_turns=_cfg['agentic_keep_full_turns'],
+            fs=FS,
+            skills_dir=_cfg['skill_fs_url'],
+            enable_builtin_tools=False,
+            force_summarize=True,
+            force_summarize_context=query,
+        )
 
     async def event_stream() -> Any:
         final_result: Any = None
 
         try:
             async with rag_sem:
-                helper = lazyllm.module.stream_helper.StreamCallHelper(react_agent, init_sid=False)
+                helper = lazyllm.module.stream_helper.StreamCallHelper(chat_callable, init_sid=False)
                 async for item in helper.astream(query, llm_chat_history=agent_history):
                     for frame in translator.feed(item):
                         cost = round(time.time() - start_time, 3)

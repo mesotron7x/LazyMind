@@ -97,7 +97,8 @@ func doCheck(ctx context.Context, category, providerName, baseURL, apiKey string
 	}
 	upstream := common.JoinURL(common.ChatServiceEndpoint(), checkEndpoint)
 	body := algoModelCheckBody{
-		Source: providerName,
+		Model:  defaultCheckModel(providerName),
+		Source: canonicalModelProviderSource(providerName),
 		URL:    baseURL,
 		APIKey: apiKey,
 	}
@@ -144,6 +145,9 @@ func usesSearchCloudServiceCheck(category, providerName string) bool {
 }
 
 func shouldVerifyCloudServiceOnSave(category, providerName string) bool {
+	if category == "model" && normalizeProviderName(providerName) == "siliconflow" {
+		return true
+	}
 	return usesSearchCloudServiceCheck(category, providerName) || category == "ocr" && isSupportedOCRCloudProvider(providerName)
 }
 
@@ -540,6 +544,24 @@ func normalizeProviderName(value string) string {
 		}
 		return -1
 	}, value)
+}
+
+func canonicalModelProviderSource(providerName string) string {
+	switch normalizeProviderName(providerName) {
+	case "siliconflow":
+		return "siliconflow"
+	default:
+		return strings.ToLower(strings.TrimSpace(providerName))
+	}
+}
+
+func defaultCheckModel(providerName string) string {
+	switch normalizeProviderName(providerName) {
+	case "siliconflow":
+		return "Qwen/Qwen2.5-7B-Instruct"
+	default:
+		return ""
+	}
 }
 
 // verifyCheckCacheKey returns the sha256 hex key for the dry_run cache.

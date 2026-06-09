@@ -64,6 +64,8 @@ if (!gotSingleInstanceLock) {
     try {
       await processManager.start('core');
       await waitForServiceHealthy(processManager, 'core', 30000);
+      await processManager.start('chat');
+      await waitForServiceHealthy(processManager, 'chat', 60000);
       await initializeAssistant();
       void processManager.startAll().catch((err) => {
         console.error('Failed to start background services:', err);

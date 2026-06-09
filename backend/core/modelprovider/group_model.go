@@ -48,6 +48,16 @@ type groupModelListResponse struct {
 	Models []groupModelListItem `json:"models"`
 }
 
+var groupModelSelectColumns = []string{
+	"id",
+	"user_model_provider_id",
+	"user_model_provider_group_id",
+	"provider_name",
+	"name",
+	"model_type",
+	"is_default",
+}
+
 // AddGroupModel inserts a user-defined model row under a connection group (custom model name and model_type).
 func AddGroupModel(w http.ResponseWriter, r *http.Request) {
 	db := store.DB()
@@ -98,6 +108,7 @@ func AddGroupModel(w http.ResponseWriter, r *http.Request) {
 
 	var group orm.UserModelProviderGroup
 	err = db.WithContext(r.Context()).
+		Select(providerGroupSelectColumns).
 		Where("id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, parent.ID, userID).
 		Take(&group).Error
 	if err != nil {
@@ -196,6 +207,7 @@ func ListGroupModels(w http.ResponseWriter, r *http.Request) {
 
 	var group orm.UserModelProviderGroup
 	err = db.WithContext(r.Context()).
+		Select(providerGroupSelectColumns).
 		Where("id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, parent.ID, userID).
 		Take(&group).Error
 	if err != nil {
@@ -209,6 +221,7 @@ func ListGroupModels(w http.ResponseWriter, r *http.Request) {
 
 	var rows []orm.UserModelProviderGroupModel
 	if err := db.WithContext(r.Context()).
+		Select(groupModelSelectColumns).
 		Where(
 			"user_model_provider_group_id = ? AND create_user_id = ? AND deleted_at IS NULL",
 			group.ID, userID,
@@ -277,7 +290,8 @@ func ListUserModelsByModelType(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rows []orm.UserModelProviderGroupModel
-	if err := q.Order("user_model_provider_group_models.user_model_provider_id ASC, user_model_provider_group_models.user_model_provider_group_id ASC, user_model_provider_group_models.name ASC").
+	if err := q.Select("user_model_provider_group_models.id, user_model_provider_group_models.user_model_provider_id, user_model_provider_group_models.user_model_provider_group_id, user_model_provider_group_models.provider_name, user_model_provider_group_models.name, user_model_provider_group_models.model_type, user_model_provider_group_models.is_default").
+		Order("user_model_provider_group_models.user_model_provider_id ASC, user_model_provider_group_models.user_model_provider_group_id ASC, user_model_provider_group_models.name ASC").
 		Find(&rows).Error; err != nil {
 		common.ReplyErr(w, "list models failed", http.StatusInternalServerError)
 		return
@@ -302,6 +316,7 @@ func ListUserModelsByModelType(w http.ResponseWriter, r *http.Request) {
 	if len(groupIDs) > 0 {
 		var grps []orm.UserModelProviderGroup
 		if err := db.WithContext(r.Context()).
+			Select(providerGroupSelectColumns).
 			Where("id IN ? AND create_user_id = ? AND deleted_at IS NULL", groupIDs, userID).
 			Find(&grps).Error; err != nil {
 			common.ReplyErr(w, "list groups failed", http.StatusInternalServerError)
@@ -376,6 +391,7 @@ func DeleteGroupModel(w http.ResponseWriter, r *http.Request) {
 
 	var group orm.UserModelProviderGroup
 	err = db.WithContext(r.Context()).
+		Select(providerGroupSelectColumns).
 		Where("id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL", groupID, parent.ID, userID).
 		Take(&group).Error
 	if err != nil {
@@ -389,6 +405,7 @@ func DeleteGroupModel(w http.ResponseWriter, r *http.Request) {
 
 	var row orm.UserModelProviderGroupModel
 	err = db.WithContext(r.Context()).
+		Select(groupModelSelectColumns).
 		Where(
 			"id = ? AND user_model_provider_group_id = ? AND user_model_provider_id = ? AND create_user_id = ? AND deleted_at IS NULL",
 			modelID, group.ID, parent.ID, userID,

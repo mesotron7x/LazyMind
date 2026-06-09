@@ -3,16 +3,18 @@ from typing import Annotated, Any, Dict, List, Optional, Union
 from fastapi import APIRouter, Body
 from lazymind.chat.config import DEFAULT_CHAT_DATASET
 from lazymind.chat.service.chat_service import handle_chat
-from lazymind.chat.service.component import get_all_tool_groups
 
 router = APIRouter()
 
 
 @router.get('/api/chat/tools', summary='List all available tool groups with their methods')
 async def list_available_tools():
+    from lazymind.chat.service.component import get_all_tool_groups
+
     return {'tool_groups': get_all_tool_groups()}
 
 
+@router.post('/api/chat', summary='Chat with the knowledge base')
 @router.post('/api/chat/stream', summary='Chat with the knowledge base (streaming)')
 async def chat(
     query: Annotated[str, Body(description='User question')],

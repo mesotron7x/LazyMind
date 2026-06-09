@@ -2,6 +2,7 @@ param(
     [string]$NodeVersion = "24.16.0",
     [string]$GoVersion = "1.25.10",
     [string]$PnpmVersion = "10.0.0",
+    [string]$UvVersion = "0.11.18",
     [string]$ToolchainRoot = (Join-Path $env:USERPROFILE ".lazymind\toolchains"),
     [switch]$ForcePinnedNode,
     [switch]$ForcePinnedGo,
@@ -279,6 +280,54 @@ function Ensure-Pnpm {
     return $NpmGlobalPrefix
 }
 
+function Test-UvUsable {
+    $uv = Get-CommandPath "uv"
+    if (-not $uv) {
+        return $false
+    }
+    try {
+        $versionText = (& $uv --version 2>$null)
+        if ($versionText -match "^uv\s+([0-9]+\.[0-9]+\.[0-9]+)") {
+            return ($Matches[1].Trim() -eq $UvVersion)
+        }
+    }
+    catch {
+        return $false
+    }
+    return $false
+}
+
+function Ensure-Uv {
+    $uvDir = Join-Path $ToolchainRoot "uv-$UvVersion"
+    $uvExe = Join-Path $uvDir "uv.exe"
+    if (Test-UvUsable) {
+        Write-Step "Using existing uv"
+        uv --version
+        return $null
+    }
+
+    if (Test-Path $uvExe) {
+        Write-Step "Using pinned uv at $uvDir"
+    }
+    else {
+        Write-Step "Installing uv $UvVersion"
+        New-Item -ItemType Directory -Force -Path $ToolchainRoot | Out-Null
+        $zipPath = Join-Path $ToolchainRoot "uv-$UvVersion-x86_64-pc-windows-msvc.zip"
+        $extractDir = Join-Path $ToolchainRoot "uv-extract-$([Guid]::NewGuid().ToString('N'))"
+        $url = "https://github.com/astral-sh/uv/releases/download/$UvVersion/uv-x86_64-pc-windows-msvc.zip"
+        Invoke-WebRequest -Uri $url -OutFile $zipPath
+        New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+        Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDir -Force
+        New-Item -ItemType Directory -Force -Path $uvDir | Out-Null
+        Move-Item -LiteralPath (Join-Path $extractDir "uv.exe") -Destination $uvExe -Force
+        Move-Item -LiteralPath (Join-Path $extractDir "uvx.exe") -Destination (Join-Path $uvDir "uvx.exe") -Force
+        Remove-Item -LiteralPath $zipPath -Force
+        Remove-Item -LiteralPath $extractDir -Recurse -Force
+    }
+    Add-PathForCurrentProcess @($uvDir)
+    return $uvDir
+}
+
 Assert-Windows
 
 $scoopShims = Join-Path $env:USERPROFILE "scoop\shims"
@@ -294,6 +343,7 @@ Add-PathForCurrentProcess @($scoopShims, $scoopGitUsrBin)
 $nodePath = Ensure-Node
 $goPath = Ensure-Go
 $pnpmPath = Ensure-Pnpm -NpmGlobalPrefix $npmGlobalPrefix
+$uvPath = Ensure-Uv
 
 $persistEntries = @($scoopShims, $scoopGitUsrBin)
 if ($nodePath) {
@@ -304,6 +354,9 @@ if ($goPath) {
 }
 if ($pnpmPath) {
     $persistEntries += $pnpmPath
+}
+if ($uvPath) {
+    $persistEntries += $uvPath
 }
 Add-UserPath -Entries $persistEntries
 

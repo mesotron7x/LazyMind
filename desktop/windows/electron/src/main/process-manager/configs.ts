@@ -31,11 +31,15 @@ function getAlgorithmDir(): string {
 function getPythonExecutable(): string {
   const desktopRoot = getDesktopRoot();
   if (desktopRoot) {
-    const bundledPython = path.join(desktopRoot, 'python', 'python.exe');
+    const bundledPython = path.join(desktopRoot, 'python', 'Scripts', 'python.exe');
     if (fs.existsSync(bundledPython)) return bundledPython;
+    const legacyBundledPython = path.join(desktopRoot, 'python', 'python.exe');
+    if (fs.existsSync(legacyBundledPython)) return legacyBundledPython;
     return 'python';
   }
   if (app.isPackaged) {
+    const bundledPython = path.join(process.resourcesPath, 'python', 'Scripts', 'python.exe');
+    if (fs.existsSync(bundledPython)) return bundledPython;
     return path.join(process.resourcesPath, 'python', 'python.exe');
   }
   return 'python';
@@ -175,6 +179,7 @@ export function getProcessConfigs(): ProcessConfig[] {
   const authServiceDir = path.join(binDir, 'auth-service');
   const authServiceExe = path.join(authServiceDir, 'auth-service.exe');
   const authServiceUsesExe = desktopRuntime && fileExists(authServiceExe);
+  const pythonPath = [algorithmDir, path.join(algorithmDir, 'lazyllm')].join(path.delimiter);
 
   const configs: ProcessConfig[] = [
     {
@@ -245,6 +250,42 @@ export function getProcessConfigs(): ProcessConfig[] {
       restartPolicy: 'on-failure',
       maxRestarts: 3,
     },
+    {
+      name: 'chat',
+      executablePath: pythonExe,
+      args: ['-m', 'lazymind.chat.app', '--host', '127.0.0.1', '--port', String(DEFAULT_PORTS.chat)],
+      env: {
+        PYTHONPATH: pythonPath,
+        LAZYLLM_HOME: path.join(dataDir.cache, 'lazyllm'),
+        LAZYMIND_HOME: path.join(dataDir.cache, 'lazymind'),
+        LAZYMIND_MODE: 'desktop',
+        LAZYMIND_MOUNT_BASE_DIR: dataDir.data,
+        LAZYMIND_MILVUS_URI: path.join(dataDir.vector, 'milvus.db'),
+        LAZYMIND_DATABASE_URL: `sqlite:///${path.join(dataDir.data, 'algorithm.db')}`,
+        LAZYMIND_ALGO_SERVICE_URL: `http://127.0.0.1:${DEFAULT_PORTS.parsing}`,
+        LAZYMIND_CORE_API_URL: `http://127.0.0.1:${DEFAULT_PORTS.core}`,
+        LAZYMIND_CORE_SERVICE_URL: `http://127.0.0.1:${DEFAULT_PORTS.core}`,
+        LAZYMIND_DOCUMENT_SERVER_URL: `http://127.0.0.1:${DEFAULT_PORTS.parsing}`,
+        LAZYMIND_DOCUMENT_PROCESSOR_URL: `http://127.0.0.1:${DEFAULT_PORTS.processor}`,
+        LAZYMIND_SHARED_UPLOAD_DIR: dataDir.uploads,
+        LAZYMIND_SKIP_STARTUP_PIPELINE: 'false',
+        LAZYMIND_RAG_MODE: 'true',
+        LAZYMIND_OCR_SERVER_TYPE: 'none',
+      },
+      cwd: algorithmDir,
+      port: DEFAULT_PORTS.chat,
+      healthCheck: {
+        type: 'http',
+        endpoint: '/health',
+        intervalMs: 3000,
+        timeoutMs: 5000,
+        retries: 20,
+      },
+      dependsOn: ['core'],
+      startupTimeout: 60000,
+      restartPolicy: 'on-failure',
+      maxRestarts: 3,
+    },
   ];
 
   const optionalConfigs: ProcessConfig[] = [
@@ -296,45 +337,6 @@ export function getProcessConfigs(): ProcessConfig[] {
       },
       dependsOn: ['scan-control-plane'],
       startupTimeout: 20000,
-      restartPolicy: 'on-failure',
-      maxRestarts: 3,
-    },
-    {
-      name: 'chat',
-      executablePath: desktopRuntime
-        ? path.join(algorithmDir, 'chat', 'chat.exe')
-        : pythonExe,
-      args: desktopRuntime
-        ? []
-        : ['-m', 'chat.app.chat', '--host', '127.0.0.1', '--port', String(DEFAULT_PORTS.chat)],
-      env: {
-        LAZYMIND_MODE: 'desktop',
-        LAZYMIND_MOUNT_BASE_DIR: dataDir.data,
-        LAZYMIND_MILVUS_URI: path.join(dataDir.vector, 'milvus.db'),
-        LAZYMIND_DATABASE_URL: `sqlite:///${path.join(dataDir.data, 'algorithm.db')}`,
-        LAZYMIND_ALGO_SERVICE_URL: `http://127.0.0.1:${DEFAULT_PORTS.parsing}`,
-        LAZYMIND_CORE_API_URL: `http://127.0.0.1:${DEFAULT_PORTS.core}`,
-        LAZYMIND_CORE_SERVICE_URL: `http://127.0.0.1:${DEFAULT_PORTS.core}`,
-        LAZYMIND_DOCUMENT_SERVER_URL: `http://127.0.0.1:${DEFAULT_PORTS.parsing}`,
-        LAZYMIND_DOCUMENT_PROCESSOR_URL: `http://127.0.0.1:${DEFAULT_PORTS.processor}`,
-        LAZYMIND_SHARED_UPLOAD_DIR: dataDir.uploads,
-        LAZYMIND_SKIP_STARTUP_PIPELINE: 'false',
-        LAZYMIND_RAG_MODE: 'true',
-        LAZYMIND_OCR_SERVER_TYPE: 'none',
-      },
-      cwd: desktopRuntime
-        ? path.join(algorithmDir, 'chat')
-        : algorithmDir,
-      port: DEFAULT_PORTS.chat,
-      healthCheck: {
-        type: 'http',
-        endpoint: '/health',
-        intervalMs: 3000,
-        timeoutMs: 5000,
-        retries: 20,
-      },
-      dependsOn: ['core'],
-      startupTimeout: 60000,
       restartPolicy: 'on-failure',
       maxRestarts: 3,
     },

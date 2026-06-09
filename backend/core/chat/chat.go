@@ -46,8 +46,8 @@ type LazyChatRequest struct {
 	Reasoning          bool            `json:"reasoning"`
 	Databases          []any           `json:"databases,omitempty"`
 	EnableThinking     bool            `json:"enable_thinking,omitempty"`
-	AvailableTools     []string        `json:"available_tools,omitempty"`
-	AvailableSkills    []string        `json:"available_skills,omitempty"`
+	AvailableTools     []string        `json:"available_tools"`
+	AvailableSkills    []string        `json:"available_skills"`
 	Memory             string          `json:"memory,omitempty"`
 	UserPreference     string          `json:"user_preference,omitempty"`
 	UseMemory          bool            `json:"use_memory"`
@@ -352,9 +352,6 @@ func datasetFiltersFromAny(v any) *DatasetFilters {
 
 func stringSlice(v any) []string {
 	if raw, ok := v.([]string); ok {
-		if len(raw) == 0 {
-			return nil
-		}
 		return raw
 	}
 	rawAny, ok := v.([]any)
