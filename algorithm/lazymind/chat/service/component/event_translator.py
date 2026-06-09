@@ -213,7 +213,12 @@ def _merge_sources(
 
 def _format_final_result(result: Any, config: dict) -> dict[str, Any]:
     if isinstance(result, dict):
-        raw_text = str(result.get('text') or result.get('message') or '')
+        raw_text = str(
+            result.get('text')
+            or result.get('message')
+            or result.get('content')
+            or ''
+        )
         existing_think = result.get('think') or result.get('reasoning_content') or ''
         existing_sources = result.get('sources')
     else:

@@ -18,7 +18,7 @@ def test_handle_chat_uses_llm_directly_without_tools_or_skills(monkeypatch):
 
     class FakeFuture:
         def result(self):
-            return {'text': 'final:hello'}
+            return {'content': 'Hello there'}
 
     class FakeHelper:
         def __init__(self, impl, **kwargs):
@@ -26,7 +26,8 @@ def test_handle_chat_uses_llm_directly_without_tools_or_skills(monkeypatch):
             self.future = FakeFuture()
 
         async def astream(self, query, llm_chat_history=None):
-            yield {'tag': 'text', 'delta': f'answer:{query}'}
+            yield {'tag': 'text', 'delta': 'Hello'}
+            yield {'tag': 'text', 'delta': 'there'}
 
     class FakeAgent:
         def __init__(self, *args, **kwargs):
@@ -61,5 +62,6 @@ def test_handle_chat_uses_llm_directly_without_tools_or_skills(monkeypatch):
     assert helper_calls
     assert helper_calls[0]['impl'] is fake_llm
     assert helper_calls[0]['kwargs']['init_sid'] is False
-    assert 'answer:hello' in body
+    assert 'Hello there' in body
+    assert 'Hellothere' not in body
     assert '"status": "FINISHED"' in body

@@ -137,6 +137,7 @@ async def handle_chat(query: str, history: Optional[List[Dict[str, Any]]],
     llm = AutoModel(model='llm')
 
     chat_callable: Any = llm
+    stream_text_live = False
     if active_configs or available_skills:
         chat_callable = lazyllm.tools.agent.ReactAgent(
             llm=llm,
@@ -153,6 +154,7 @@ async def handle_chat(query: str, history: Optional[List[Dict[str, Any]]],
             force_summarize=True,
             force_summarize_context=query,
         )
+        stream_text_live = True
 
     async def event_stream() -> Any:
         final_result: Any = None
@@ -161,6 +163,8 @@ async def handle_chat(query: str, history: Optional[List[Dict[str, Any]]],
             async with rag_sem:
                 helper = lazyllm.module.stream_helper.StreamCallHelper(chat_callable, init_sid=False)
                 async for item in helper.astream(query, llm_chat_history=agent_history):
+                    if not stream_text_live and str(item.get('tag') or '') == 'text':
+                        continue
                     for frame in translator.feed(item):
                         cost = round(time.time() - start_time, 3)
                         yield log_and_emit_frame(frame, cost, query, session_id, tag='FEED')
