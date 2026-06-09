@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,6 +34,69 @@ func newTestDB(t *testing.T) *orm.DB {
 		_ = sqlDB.Close()
 	})
 	return db
+}
+
+func newMigratedSQLiteTestDB(t *testing.T) *orm.DB {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "migrated.db")
+	db, err := orm.Connect(orm.DriverSQLite, dbPath)
+	if err != nil {
+		t.Fatalf("connect db: %v", err)
+	}
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
+	schema, err := os.ReadFile(filepath.Join("..", "migrations", "sqlite", "000001_init_schema.up.sql"))
+	if err != nil {
+		t.Fatalf("read sqlite schema: %v", err)
+	}
+	if _, err := sqlDB.Exec(string(schema)); err != nil {
+		t.Fatalf("apply sqlite schema: %v", err)
+	}
+	return db
+}
+
+func TestBuildChatResourceContextWorksWithMigratedSQLiteTextTimes(t *testing.T) {
+	db := newMigratedSQLiteTestDB(t)
+	badSQLiteTime := "2026-06-09 12:53:48.800385+08:00"
+	if err := db.Exec(
+		`INSERT INTO system_memories (id, user_id, content, content_hash, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		"memory-u1", "u1", "remember this", HashContent("remember this"), badSQLiteTime, badSQLiteTime,
+	).Error; err != nil {
+		t.Fatalf("insert migrated memory row: %v", err)
+	}
+	if err := db.Exec(
+		`INSERT INTO system_user_preferences (id, user_id, content, content_hash, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		"preference-u1", "u1", "prefer this", HashContent("prefer this"), badSQLiteTime, badSQLiteTime,
+	).Error; err != nil {
+		t.Fatalf("insert migrated preference row: %v", err)
+	}
+
+	ctx, err := BuildChatResourceContext(context.Background(), db.DB, "u1", "User 1", "session-migrated")
+	if err != nil {
+		t.Fatalf("build chat resource context: %v", err)
+	}
+	if ctx == nil {
+		t.Fatalf("expected context")
+	}
+	if ctx.Memory != "remember this" || ctx.UserPreference != "prefer this" {
+		t.Fatalf("unexpected context content: %#v", ctx)
+	}
+
+	var snapshotCount int64
+	if err := db.Model(&orm.ResourceSessionSnapshot{}).Where("session_id = ?", "session-migrated").Count(&snapshotCount).Error; err != nil {
+		t.Fatalf("count snapshots: %v", err)
+	}
+	if snapshotCount != 2 {
+		t.Fatalf("expected memory and preference snapshots, got %d", snapshotCount)
+	}
 }
 
 func TestBuildChatResourceContextCreatesPerUserResourcesAndSnapshots(t *testing.T) {

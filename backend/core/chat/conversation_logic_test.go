@@ -34,6 +34,49 @@ func TestBuildChatRequestBodyUsesConversationIDDerivedSessionID(t *testing.T) {
 	}
 }
 
+func TestParseUpstreamChatResponseAggregatesLineStream(t *testing.T) {
+	raw := strings.Join([]string{
+		`{"code":200,"msg":"success","data":{"think":null,"text":"测试","sources":[]}}`,
+		`{"code":200,"msg":"success","data":{"think":null,"text":"成功","sources":[{"id":"s1"}]}}`,
+		`{"code":200,"msg":"success","data":{"status":"FINISHED"}}`,
+	}, "\n\n")
+
+	parsed, err := parseUpstreamChatResponse([]byte(raw))
+	if err != nil {
+		t.Fatalf("parse response: %v", err)
+	}
+	if parsed.Code != 200 {
+		t.Fatalf("expected code 200, got %d", parsed.Code)
+	}
+	if parsed.Answer != "测试成功" {
+		t.Fatalf("unexpected answer: %q", parsed.Answer)
+	}
+	if parsed.RawAnswer != "测试成功" {
+		t.Fatalf("unexpected raw answer: %q", parsed.RawAnswer)
+	}
+	if len(parsed.Sources) != 1 {
+		t.Fatalf("expected one source, got %#v", parsed.Sources)
+	}
+}
+
+func TestParseUpstreamChatResponseKeepsSingleJSONBehavior(t *testing.T) {
+	raw := `{"code":200,"msg":"success","data":{"think":"推理","text":"最终回答","sources":[{"id":"s1"}]}}`
+
+	parsed, err := parseUpstreamChatResponse([]byte(raw))
+	if err != nil {
+		t.Fatalf("parse response: %v", err)
+	}
+	if parsed.Answer != "最终回答" {
+		t.Fatalf("unexpected answer: %q", parsed.Answer)
+	}
+	if parsed.RawAnswer != "<think>推理</think>最终回答" {
+		t.Fatalf("unexpected raw answer: %q", parsed.RawAnswer)
+	}
+	if len(parsed.Sources) != 1 {
+		t.Fatalf("expected one source, got %#v", parsed.Sources)
+	}
+}
+
 func TestBuildChatRequestBodyUsesDatasetListFilters(t *testing.T) {
 	body := buildChatRequestBody("conv-1", "", "hello", nil, map[string]any{
 		"conversation": map[string]any{

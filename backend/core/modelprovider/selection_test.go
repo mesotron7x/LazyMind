@@ -117,3 +117,48 @@ func TestSetSharedModelCreatesSelectionFromValidModelID(t *testing.T) {
 		t.Fatalf("expected shared qwen selection, got %#v", row)
 	}
 }
+
+func TestSetSharedModelCanShareLLMWhenEmbeddingIsAlreadyShared(t *testing.T) {
+	db := setupSelectedModelTestDB(t)
+	seedSelectableModel(t, db, "user-1", "model-qwen2-14b", "llm")
+	seedSelectableModel(t, db, "user-1", "model-qwen3-embed", "embed")
+
+	badSQLiteTime := "2026-06-09 13:56:59.6178172+08:00"
+	if err := db.Exec(
+		`INSERT INTO user_selected_models
+		 (user_id, user_name, model_type, user_model_provider_group_model_id, share, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"user-1", "User 1", "llm", "model-qwen2-14b", false, badSQLiteTime, badSQLiteTime,
+	).Error; err != nil {
+		t.Fatalf("create llm selection: %v", err)
+	}
+	if err := db.Exec(
+		`INSERT INTO user_selected_models
+		 (user_id, user_name, model_type, user_model_provider_group_model_id, share, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"user-1", "User 1", "embed_main", "model-qwen3-embed", true, badSQLiteTime, badSQLiteTime,
+	).Error; err != nil {
+		t.Fatalf("create embedding selection: %v", err)
+	}
+
+	rec := performSetSharedModel(`{"model_key":"llm","model_id":"model-qwen2-14b","share":true}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var llmRow orm.UserSelectedModel
+	if err := db.Where("user_id = ? AND model_type = ?", "user-1", "llm").Take(&llmRow).Error; err != nil {
+		t.Fatalf("query llm selection: %v", err)
+	}
+	if !llmRow.Share {
+		t.Fatalf("expected llm selection to be shared, got %#v", llmRow)
+	}
+
+	var embedRow orm.UserSelectedModel
+	if err := db.Where("user_id = ? AND model_type = ?", "user-1", "embed_main").Take(&embedRow).Error; err != nil {
+		t.Fatalf("query embed selection: %v", err)
+	}
+	if !embedRow.Share {
+		t.Fatalf("expected embed selection to remain shared, got %#v", embedRow)
+	}
+}

@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -36,6 +38,120 @@ func marshalRetrievalResult(sources []any) json.RawMessage {
 		return nil
 	}
 	return payload
+}
+
+type upstreamChatEnvelope struct {
+	Code int             `json:"code"`
+	Msg  string          `json:"msg"`
+	Data json.RawMessage `json:"data"`
+}
+
+type upstreamChatPayload struct {
+	Text    string `json:"text"`
+	Think   string `json:"think"`
+	Status  string `json:"status"`
+	Sources []any  `json:"sources"`
+}
+
+type parsedUpstreamChatResponse struct {
+	Code      int
+	Msg       string
+	Answer    string
+	RawAnswer string
+	Sources   []any
+}
+
+func parseUpstreamChatResponse(respBytes []byte) (parsedUpstreamChatResponse, error) {
+	trimmed := bytes.TrimSpace(respBytes)
+	if len(trimmed) == 0 {
+		return parsedUpstreamChatResponse{Code: 500, Msg: "empty chat service response"}, nil
+	}
+
+	var single upstreamChatEnvelope
+	if err := json.Unmarshal(trimmed, &single); err == nil {
+		return parseUpstreamChatEnvelope(single), nil
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(respBytes))
+	scanner.Buffer(nil, 1024*1024)
+	var textBuilder strings.Builder
+	var thinkBuilder strings.Builder
+	var sources []any
+	seen := false
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if line == "" || line == "[DONE]" {
+			continue
+		}
+		var envelope upstreamChatEnvelope
+		if err := json.Unmarshal([]byte(line), &envelope); err != nil {
+			return parsedUpstreamChatResponse{}, err
+		}
+		seen = true
+		if envelope.Code != 200 {
+			return parseUpstreamChatEnvelope(envelope), nil
+		}
+		var payload upstreamChatPayload
+		if len(envelope.Data) > 0 && json.Unmarshal(envelope.Data, &payload) == nil {
+			textBuilder.WriteString(payload.Text)
+			thinkBuilder.WriteString(payload.Think)
+			if len(payload.Sources) > 0 {
+				sources = append(sources, payload.Sources...)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return parsedUpstreamChatResponse{}, err
+	}
+	if !seen {
+		return parsedUpstreamChatResponse{Code: 500, Msg: "invalid chat service response"}, nil
+	}
+
+	text := strings.TrimSpace(textBuilder.String())
+	rawAnswer := text
+	if think := strings.TrimSpace(thinkBuilder.String()); think != "" {
+		rawAnswer = "<think>" + think + "</think>" + text
+	}
+	answer := strings.TrimSpace(stripToolTags(text))
+	if answer == "" {
+		answer = strings.TrimSpace(stripToolTags(rawAnswer))
+	}
+	return parsedUpstreamChatResponse{
+		Code:      200,
+		Msg:       "success",
+		Answer:    answer,
+		RawAnswer: rawAnswer,
+		Sources:   sources,
+	}, nil
+}
+
+func parseUpstreamChatEnvelope(envelope upstreamChatEnvelope) parsedUpstreamChatResponse {
+	out := parsedUpstreamChatResponse{Code: envelope.Code, Msg: envelope.Msg}
+	if envelope.Code != 200 {
+		return out
+	}
+
+	var payload upstreamChatPayload
+	if len(envelope.Data) > 0 && json.Unmarshal(envelope.Data, &payload) == nil {
+		if payload.Think != "" {
+			out.RawAnswer = "<think>" + strings.TrimSpace(payload.Think) + "</think>" + strings.TrimSpace(payload.Text)
+		} else {
+			out.RawAnswer = strings.TrimSpace(payload.Text)
+		}
+		out.Answer = strings.TrimSpace(stripToolTags(payload.Text))
+		out.Sources = payload.Sources
+	}
+	if out.RawAnswer == "" {
+		out.RawAnswer = strings.TrimSpace(string(envelope.Data))
+	}
+	if out.Answer == "" {
+		out.Answer = strings.TrimSpace(stripToolTags(out.RawAnswer))
+	}
+	return out
 }
 
 // newID text history text ID。
@@ -536,39 +652,16 @@ func handleNonStreamChat(
 		return
 	}
 	fmt.Println("DEBUG upstream response url=", upstreamURL, " status=", statusCode)
-	var pyResp struct {
-		Code int             `json:"code"`
-		Msg  string          `json:"msg"`
-		Data json.RawMessage `json:"data"`
+	parsed, err := parseUpstreamChatResponse(respBytes)
+	if err != nil {
+		common.ReplyErr(w, fmt.Sprintf("%s: %v", "parse chat service response failed", err), http.StatusBadGateway)
+		return
 	}
-	_ = json.Unmarshal(respBytes, &pyResp)
-	answer := ""
-	rawAnswer := ""
-	var sources []any
-	if pyResp.Code == 200 && len(pyResp.Data) > 0 {
-		var data struct {
-			Text    string `json:"text"`
-			Think   string `json:"think"`
-			Sources []any  `json:"sources"`
-		}
-		if json.Unmarshal(pyResp.Data, &data) == nil {
-			if data.Think != "" {
-				rawAnswer = "<think>" + strings.TrimSpace(data.Think) + "</think>" + strings.TrimSpace(data.Text)
-			} else {
-				rawAnswer = strings.TrimSpace(data.Text)
-			}
-			answer = strings.TrimSpace(stripToolTags(data.Text))
-			sources = data.Sources
-		}
-		if rawAnswer == "" {
-			rawAnswer = strings.TrimSpace(string(pyResp.Data))
-		}
-		if answer == "" {
-			answer = strings.TrimSpace(stripToolTags(rawAnswer))
-		}
-	}
-	if pyResp.Code != 200 {
-		answer = "error: " + pyResp.Msg
+	answer := parsed.Answer
+	rawAnswer := parsed.RawAnswer
+	sources := parsed.Sources
+	if parsed.Code != 200 {
+		answer = "error: " + parsed.Msg
 		rawAnswer = answer
 	}
 	historyID := target.HistoryID

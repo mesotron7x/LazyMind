@@ -245,7 +245,9 @@ func SetSelectedModels(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			var row orm.UserSelectedModel
-			err := tx.Where("user_id = ? AND model_type = ?", userID, modelType).Take(&row).Error
+			err := tx.Select("id").
+				Where("user_id = ? AND model_type = ?", userID, modelType).
+				Take(&row).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				createFields := map[string]any{
 					"user_id":                            userID,
@@ -379,7 +381,8 @@ func SetSharedModel(w http.ResponseWriter, r *http.Request) {
 		// Look up the exact row by (user_id, model_type) — the unique key — so we
 		// never accidentally touch another user's row for the same model_id.
 		var row orm.UserSelectedModel
-		if err := tx.Where("user_id = ? AND model_type = ?", userID, modelKey).
+		if err := tx.Select("id").
+			Where("user_id = ? AND model_type = ?", userID, modelKey).
 			First(&row).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				if !req.Share || modelID == "" {

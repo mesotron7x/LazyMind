@@ -77,6 +77,7 @@ func SetPersonalizationSetting(w http.ResponseWriter, r *http.Request) {
 func LoadUserPersonalizationEnabled(ctx context.Context, db *gorm.DB, userID string) (bool, error) {
 	var row orm.UserPersonalizationSetting
 	err := db.WithContext(ctx).
+		Select("id", "enabled").
 		Where("user_id = ?", strings.TrimSpace(userID)).
 		Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -94,7 +95,10 @@ func UpsertUserPersonalizationEnabled(ctx context.Context, db *gorm.DB, userID, 
 	now := time.Now()
 
 	var row orm.UserPersonalizationSetting
-	err := db.WithContext(ctx).Where("user_id = ?", userID).Take(&row).Error
+	err := db.WithContext(ctx).
+		Select("id", "enabled").
+		Where("user_id = ?", userID).
+		Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		if err := db.WithContext(ctx).Model(&orm.UserPersonalizationSetting{}).Create(map[string]any{
 			"user_id":         userID,

@@ -204,6 +204,8 @@ def get_all_tool_groups() -> list[dict]:
 
 
 def group_is_active(cfg: ToolGroupConfig) -> bool:
+    if not _has_agent_tool_docstrings(cfg.instance):
+        return False
     key_source = getattr(cfg.instance, '__key_source__', None)
     if key_source is None:
         return True
@@ -211,6 +213,19 @@ def group_is_active(cfg: ToolGroupConfig) -> bool:
         return bool(key_source())
     except Exception:
         return False
+
+
+def _has_agent_tool_docstrings(instance: Any) -> bool:
+    public_apis = getattr(instance, '__public_apis__', None)
+    if public_apis is not None:
+        for method_name in public_apis:
+            method = getattr(instance, method_name, None)
+            if method is None or not inspect.getdoc(method):
+                return False
+        return True
+    if callable(instance):
+        return bool(inspect.getdoc(instance))
+    return False
 
 
 def filter_tools(

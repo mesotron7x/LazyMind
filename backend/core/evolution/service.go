@@ -90,7 +90,11 @@ func EnsureSystemMemory(ctx context.Context, db *gorm.DB, userID, userName strin
 	var row orm.SystemMemory
 	userID = strings.TrimSpace(userID)
 	userName = strings.TrimSpace(userName)
-	err := tx.Where("user_id = ?", userID).Order("created_at ASC").Take(&row).Error
+	err := tx.
+		Select("id", "content", "content_hash").
+		Where("user_id = ?", userID).
+		Order("created_at ASC").
+		Take(&row).Error
 	if err == nil {
 		if strings.TrimSpace(row.ContentHash) == "" {
 			row.ContentHash = HashContent(row.Content)
@@ -145,7 +149,11 @@ func EnsureSystemUserPreference(ctx context.Context, db *gorm.DB, userID, userNa
 	var row orm.SystemUserPreference
 	userID = strings.TrimSpace(userID)
 	userName = strings.TrimSpace(userName)
-	err := tx.Where("user_id = ?", userID).Order("created_at ASC").Take(&row).Error
+	err := tx.
+		Select("id", "content", "content_hash").
+		Where("user_id = ?", userID).
+		Order("created_at ASC").
+		Take(&row).Error
 	if err == nil {
 		if strings.TrimSpace(row.ContentHash) == "" {
 			row.ContentHash = HashContent(row.Content)
@@ -211,6 +219,16 @@ func BuildChatResourceContext(ctx context.Context, db *gorm.DB, userID, userName
 
 	var skills []orm.SkillResource
 	if err := db.WithContext(ctx).
+		Select(
+			"id",
+			"category",
+			"parent_skill_name",
+			"skill_name",
+			"file_ext",
+			"relative_path",
+			"content",
+			"content_hash",
+		).
 		Where("owner_user_id = ? AND node_type = ? AND is_enabled = ?", userID, SkillNodeTypeParent, true).
 		Order("category ASC, skill_name ASC").
 		Find(&skills).Error; err != nil {
@@ -366,7 +384,11 @@ func loadLegacySystemMemoryTemplate(ctx context.Context, tx *gorm.DB, userID str
 	}
 
 	var row orm.SystemMemory
-	err := tx.WithContext(ctx).Where("user_id = ?", "").Order("created_at ASC").Take(&row).Error
+	err := tx.WithContext(ctx).
+		Select("id", "content", "content_hash", "version", "updated_by", "updated_by_name").
+		Where("user_id = ?", "").
+		Order("created_at ASC").
+		Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return orm.SystemMemory{}, nil
 	}
@@ -383,7 +405,11 @@ func loadLegacySystemUserPreferenceTemplate(ctx context.Context, tx *gorm.DB, us
 	}
 
 	var row orm.SystemUserPreference
-	err := tx.WithContext(ctx).Where("user_id = ?", "").Order("created_at ASC").Take(&row).Error
+	err := tx.WithContext(ctx).
+		Select("id", "content", "content_hash", "version", "updated_by", "updated_by_name").
+		Where("user_id = ?", "").
+		Order("created_at ASC").
+		Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return orm.SystemUserPreference{}, nil
 	}
@@ -396,6 +422,15 @@ func loadLegacySystemUserPreferenceTemplate(ctx context.Context, tx *gorm.DB, us
 func LoadSkillStateByResourceKey(ctx context.Context, db *gorm.DB, userID, resourceKey string) (*SkillState, error) {
 	var skill orm.SkillResource
 	err := db.WithContext(ctx).
+		Select(
+			"id",
+			"category",
+			"parent_skill_name",
+			"skill_name",
+			"relative_path",
+			"content",
+			"content_hash",
+		).
 		Where("owner_user_id = ? AND id = ?",
 			strings.TrimSpace(userID),
 			strings.TrimSpace(resourceKey),
@@ -410,6 +445,15 @@ func LoadSkillStateByResourceKey(ctx context.Context, db *gorm.DB, userID, resou
 func LoadParentSkillState(ctx context.Context, db *gorm.DB, userID, category, skillName string) (*SkillState, error) {
 	var skill orm.SkillResource
 	err := db.WithContext(ctx).
+		Select(
+			"id",
+			"category",
+			"parent_skill_name",
+			"skill_name",
+			"relative_path",
+			"content",
+			"content_hash",
+		).
 		Where("owner_user_id = ? AND category = ? AND node_type = ? AND (skill_name = ? OR parent_skill_name = ?)",
 			strings.TrimSpace(userID),
 			strings.TrimSpace(category),
