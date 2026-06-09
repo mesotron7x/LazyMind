@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"lazymind/core/common/orm"
 	appLog "lazymind/core/log"
@@ -267,7 +268,16 @@ func BuildChatResourceContext(ctx context.Context, db *gorm.DB, userID, userName
 	if len(availableSkills) > 1 {
 		sort.Strings(availableSkills)
 	}
-	if err := db.WithContext(ctx).Create(&snapshots).Error; err != nil {
+	if err := db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "session_id"},
+				{Name: "resource_type"},
+				{Name: "resource_key"},
+			},
+			DoNothing: true,
+		}).
+		Create(&snapshots).Error; err != nil {
 		return nil, err
 	}
 

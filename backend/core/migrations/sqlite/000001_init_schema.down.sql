@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS user_personalization_settings;
 DROP TABLE IF EXISTS user_model_providers;
 DROP TABLE IF EXISTS user_model_provider_groups;
 DROP TABLE IF EXISTS user_model_provider_group_models;
+DROP TABLE IF EXISTS user_selected_providers;
 DROP TABLE IF EXISTS uploaded_files;
 DROP TABLE IF EXISTS upload_sessions;
 DROP TABLE IF EXISTS tasks;

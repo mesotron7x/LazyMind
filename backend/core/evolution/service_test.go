@@ -25,6 +25,13 @@ func newTestDB(t *testing.T) *orm.DB {
 	if err := db.AutoMigrate(orm.AllModelsForDDL()...); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
 	return db
 }
 
@@ -136,6 +143,34 @@ func TestBuildChatResourceContextCreatesPerUserResourcesAndSnapshots(t *testing.
 	}
 	if len(prefs) != 2 || prefs[0].UserID != "u1" || prefs[1].UserID != "u2" {
 		t.Fatalf("expected per-user preference rows for u1/u2, got %#v", prefs)
+	}
+}
+
+func TestBuildChatResourceContextIsIdempotentForSameSession(t *testing.T) {
+	db := newTestDB(t)
+
+	ctx, err := BuildChatResourceContext(context.Background(), db.DB, "u1", "User 1", "session-repeat")
+	if err != nil {
+		t.Fatalf("build initial chat resource context: %v", err)
+	}
+	if ctx == nil {
+		t.Fatalf("expected initial context")
+	}
+
+	secondCtx, err := BuildChatResourceContext(context.Background(), db.DB, "u1", "User 1", "session-repeat")
+	if err != nil {
+		t.Fatalf("expected duplicate session context build to be idempotent, got %v", err)
+	}
+	if secondCtx == nil {
+		t.Fatalf("expected second context")
+	}
+
+	var snapshotCount int64
+	if err := db.Model(&orm.ResourceSessionSnapshot{}).Where("session_id = ?", "session-repeat").Count(&snapshotCount).Error; err != nil {
+		t.Fatalf("count snapshots: %v", err)
+	}
+	if snapshotCount != 2 {
+		t.Fatalf("expected duplicate build to keep one memory and one preference snapshot, got %d", snapshotCount)
 	}
 }
 

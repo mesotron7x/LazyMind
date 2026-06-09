@@ -175,6 +175,8 @@ CREATE TABLE IF NOT EXISTS default_model_providers (
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     base_url TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT 'model',
+    capabilities TEXT NOT NULL DEFAULT 'multi_group,custom_base_url,has_models',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT
@@ -499,6 +501,8 @@ CREATE TABLE IF NOT EXISTS user_model_providers (
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     base_url TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT 'model',
+    capabilities TEXT NOT NULL DEFAULT 'multi_group,custom_base_url,has_models',
     create_user_id TEXT NOT NULL,
     create_user_name TEXT NOT NULL,
     created_at TEXT NOT NULL,
@@ -525,6 +529,17 @@ CREATE TABLE IF NOT EXISTS user_selected_models (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     share INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS user_selected_providers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL,
+    user_model_provider_group_id TEXT NOT NULL,
+    share INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS word_group_conflicts (
@@ -635,5 +650,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_user_model_provider_group_models_group_name
 CREATE UNIQUE INDEX IF NOT EXISTS uk_user_model_providers_user_default_provider ON user_model_providers (create_user_id, default_model_provider_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uk_user_personalization_settings_user_id ON user_personalization_settings (user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uk_user_selected_models_user_type ON user_selected_models (user_id, model_type);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_user_selected_providers_user_category ON user_selected_providers (user_id, category);
 CREATE UNIQUE INDEX IF NOT EXISTS ukx_create_user_id_dataset_id ON default_datasets (create_user_id, dataset_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uk_user_selected_models_shared_model ON user_selected_models (model_type) WHERE share = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_user_selected_providers_shared_category ON user_selected_providers (category) WHERE share = 1;

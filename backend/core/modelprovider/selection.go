@@ -351,7 +351,13 @@ func SetSharedModel(w http.ResponseWriter, r *http.Request) {
 		common.ReplyErr(w, "model_key is required", http.StatusBadRequest)
 		return
 	}
+	if _, ok := allowedSelectionModelTypes[modelKey]; !ok {
+		common.ReplyErr(w, "invalid model_key", http.StatusBadRequest)
+		return
+	}
+	modelID := strings.TrimSpace(req.ModelID)
 	userID := strings.TrimSpace(store.UserID(r))
+	userName := strings.TrimSpace(store.UserName(r))
 	if userID == "" {
 		common.ReplyErr(w, "missing X-User-Id", http.StatusBadRequest)
 		return
@@ -359,13 +365,40 @@ func SetSharedModel(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	err := db.WithContext(r.Context()).Transaction(func(tx *gorm.DB) error {
+		if req.Share && modelID != "" {
+			var target orm.UserModelProviderGroupModel
+			if err := tx.Select(groupModelSelectColumns).
+				Where("id = ? AND create_user_id = ? AND deleted_at IS NULL", modelID, userID).
+				First(&target).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return errors.New("target model not found")
+				}
+				return err
+			}
+		}
 		// Look up the exact row by (user_id, model_type) — the unique key — so we
 		// never accidentally touch another user's row for the same model_id.
 		var row orm.UserSelectedModel
 		if err := tx.Where("user_id = ? AND model_type = ?", userID, modelKey).
 			First(&row).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return errors.New("not found")
+				if !req.Share || modelID == "" {
+					return errors.New("not found")
+				}
+				if err := tx.Model(&orm.UserSelectedModel{}).
+					Where("model_type = ? AND share = ?", modelKey, true).
+					Updates(map[string]any{"share": false, "updated_at": now}).Error; err != nil {
+					return err
+				}
+				return tx.Model(&orm.UserSelectedModel{}).Create(map[string]any{
+					"user_id":                            userID,
+					"user_name":                          userName,
+					"model_type":                         modelKey,
+					"user_model_provider_group_model_id": modelID,
+					"share":                              true,
+					"created_at":                         now,
+					"updated_at":                         now,
+				}).Error
 			}
 			return err
 		}
@@ -378,12 +411,17 @@ func SetSharedModel(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Update only this specific row by primary key.
+		updateFields := map[string]any{"share": req.Share, "updated_at": now}
+		if req.Share && modelID != "" {
+			updateFields["user_model_provider_group_model_id"] = modelID
+			updateFields["user_name"] = userName
+		}
 		return tx.Model(&orm.UserSelectedModel{}).
 			Where("id = ?", row.ID).
-			Updates(map[string]any{"share": req.Share, "updated_at": now}).Error
+			Updates(updateFields).Error
 	})
 	if err != nil {
-		if err.Error() == "not found" {
+		if err.Error() == "not found" || err.Error() == "target model not found" {
 			common.ReplyErr(w, "model not found in selected models", http.StatusNotFound)
 			return
 		}
