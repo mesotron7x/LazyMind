@@ -86,6 +86,7 @@ build*
 lazyllm_cpp.egg-info/
 !build*.sh
 !build_document.py
+!scripts/windows/build-chat-runtime.ps1
 
 .venv/
 data/

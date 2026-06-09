@@ -32,6 +32,8 @@ make windows-desktop LAZYMIND_OUTPUT_DIR="C:/Users/$env:USERNAME/LazyMind"
 
 Open a new terminal after `windows-build-tools` so the updated user `PATH` is picked up.
 
+Windows desktop builds reuse uv's package cache and managed Python installs under `%USERPROFILE%\.lazymind`. Dependency files are materialized into the portable output with uv's `hardlink` mode by default. To override this, set `LAZYMIND_UV_LINK_MODE` to `copy`, `hardlink`, `clone`, or `symlink` before running `make windows-desktop`.
+
 ## Environment Variables
 
 ### 1. Model configuration

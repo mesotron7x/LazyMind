@@ -32,6 +32,8 @@ make windows-desktop LAZYMIND_OUTPUT_DIR="C:/Users/$env:USERNAME/LazyMind"
 
 运行 `windows-build-tools` 后建议重新打开终端，让更新后的用户 `PATH` 生效。
 
+Windows 桌面版构建会复用 `%USERPROFILE%\.lazymind` 下的 uv 包缓存和 managed Python 安装目录。依赖默认通过 uv 的 `hardlink` 模式物化到 portable 输出目录；如需覆盖，可在运行 `make windows-desktop` 前将 `LAZYMIND_UV_LINK_MODE` 设置为 `copy`、`hardlink`、`clone` 或 `symlink`。
+
 ## 环境变量
 
 ### 1. 模型配置
