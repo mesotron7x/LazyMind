@@ -27,6 +27,11 @@ hash_file() {
 }
 
 test_hermetic_hash_inputs() {
+  if [ ! -f "$ROOT/algorithm/lazyllm/pyproject.toml" ]; then
+    echo "Initializing git submodules..." >&2
+    git -C "$ROOT" submodule update --init || fail "failed to initialize submodules"
+  fi
+
   local files=(
     "$ROOT/requirements/test-hermetic.txt"
     "$ROOT/backend/auth-service/requirements.txt"
