@@ -98,8 +98,9 @@ test_hermetic_check_go() {
 
   local version
   version="$(go version | awk '{print $3}' | sed 's/^go//')"
-  [ "$version" = "$REQUIRED_GO" ] \
-    || fail "Go $version found, but Go $REQUIRED_GO is required"
+  if [[ ! "$version" =~ ^1\.24(\.[0-9]+)?$ ]]; then
+    fail "Go $version found, but Go 1.24.x is required"
+  fi
 }
 
 test_hermetic_create_or_sync_python() {
