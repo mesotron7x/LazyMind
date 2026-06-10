@@ -35,6 +35,7 @@ wget-log
 .worktrees/
 .codex-gocache/
 .codex-gomodcache/
+.worktrees/
 
 # docs
 lazyllm_chroma/
