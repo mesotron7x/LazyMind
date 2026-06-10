@@ -151,7 +151,7 @@ test_hermetic_prepare() {
   test_hermetic_create_or_sync_python
 
   export LAZYMIND_TEST_PYTHON="$PYTHON_BIN"
-  export PYTHONPATH="$ROOT:$ROOT/algorithm:$ROOT/algorithm/lazyllm:$ROOT/backend/auth-service${PYTHONPATH:+:$PYTHONPATH}"
+  export PYTHONPATH="$ROOT:$ROOT/algorithm:$ROOT/backend/auth-service${PYTHONPATH:+:$PYTHONPATH}"
 }
 
 test_hermetic_check() {
