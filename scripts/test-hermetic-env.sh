@@ -33,6 +33,7 @@ test_hermetic_hash_inputs() {
     "$ROOT/tests/backend/auth-service/requirements-test.txt"
     "$ROOT/algorithm/requirements.txt"
     "$ROOT/algorithm/lazyllm/pyproject.toml"
+    "$ROOT/scripts/test-hermetic-env.sh"
   )
 
   local file
@@ -117,7 +118,7 @@ test_hermetic_create_or_sync_python() {
   [ -f "$LOCK_STAMP" ] && actual="$(cat "$LOCK_STAMP")"
 
   if [ "$expected" != "$actual" ]; then
-    uv pip sync --python "$PYTHON_BIN" "$ROOT/requirements/test-hermetic.txt"
+    uv pip install --python "$PYTHON_BIN" -r "$ROOT/requirements/test-hermetic.txt"
     CMAKE_POLICY_VERSION_MINIMUM=3.5 \
       uv pip install --python "$PYTHON_BIN" --no-cache-dir "$ROOT/algorithm/lazyllm"
     "$PYTHON_BIN" - <<'PY'
@@ -130,10 +131,10 @@ target = Path(lazyllm.__path__[0]) / "pyproject.toml"
 if source.exists() and not target.exists():
     shutil.copy2(source, target)
 PY
-    echo "$expected" > "$LOCK_STAMP"
   fi
 
-  "$PYTHON_BIN" -m pip check >/dev/null
+  uv pip check --python "$PYTHON_BIN" >/dev/null
+  echo "$expected" > "$LOCK_STAMP"
 }
 
 test_hermetic_prepare() {
@@ -144,7 +145,7 @@ test_hermetic_prepare() {
   test_hermetic_create_or_sync_python
 
   export LAZYMIND_TEST_PYTHON="$PYTHON_BIN"
-  export PYTHONPATH="$ROOT:$ROOT/algorithm:$ROOT/backend/auth-service${PYTHONPATH:+:$PYTHONPATH}"
+  export PYTHONPATH="$ROOT:$ROOT/algorithm:$ROOT/algorithm/lazyllm:$ROOT/backend/auth-service${PYTHONPATH:+:$PYTHONPATH}"
 }
 
 test_hermetic_check() {
@@ -153,7 +154,7 @@ test_hermetic_check() {
   test_hermetic_select_node
   test_hermetic_check_go
   [ -x "$PYTHON_BIN" ] || fail "Python test venv missing: run make test-hermetic-setup"
-  "$PYTHON_BIN" -m pip check >/dev/null
+  uv pip check --python "$PYTHON_BIN" >/dev/null
   echo "Hermetic host test environment OK."
 }
 
