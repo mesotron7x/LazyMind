@@ -82,6 +82,7 @@ lazyllm_cpp.egg-info/
 !build_document.py
 
 .venv/
+.venv-test/
 data/
 volumes/
 .conda
