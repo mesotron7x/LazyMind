@@ -40,6 +40,7 @@ wget-log
 lazyllm_chroma/
 docs/en/assets
 docs/zh/assets
+docs/superpowers
 
 # Prerequisites
 *.d
