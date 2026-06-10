@@ -134,7 +134,7 @@ import lazyllm
 
 source = Path("algorithm/lazyllm/pyproject.toml").resolve()
 target = Path(lazyllm.__path__[0]) / "pyproject.toml"
-if source.exists() and not target.exists():
+if source.exists():
     shutil.copy2(source, target)
 PY
   fi
