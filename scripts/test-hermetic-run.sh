@@ -26,7 +26,9 @@ run_section() {
 
 run_frontend() {
   cd "$ROOT/tests/frontend"
-  npm ci --silent
+  if [ ! -d "node_modules" ] || [ "package-lock.json" -nt "node_modules" ]; then
+    npm ci --silent
+  fi
   npm test
 }
 
