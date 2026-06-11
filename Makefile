@@ -179,7 +179,7 @@ help:
 	@echo "  make test       - Run project test script"
 	@echo "  make test-hermetic - Prepare an isolated host test env and run the same scope as make test"
 	@echo "  make test-hermetic-setup - Prepare the uv-managed Python test env and check Node/Go"
-	@echo "  make test-hermetic-check - Check uv, fnm/nvm, Node 20, Go 1.24.0, and the test venv"
+	@echo "  make test-hermetic-check - Check uv, fnm/nvm, Node 20, Go 1.25.0, and the test venv"
 	@echo "  make clear      - Stop services, remove volumes, clear Python cache"
 	@echo "  make reset-kb   - Stop services, wipe KB data (Milvus, OpenSearch, uploads, lazyllm DB tables)"
 	@echo "                    Set LAZYMIND_RESET_ALGO_ON_STARTUP=true to also clear algo state on next startup"

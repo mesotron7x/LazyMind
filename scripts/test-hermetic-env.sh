@@ -7,7 +7,7 @@ PYTHON_BIN="$VENV_DIR/bin/python"
 LOCK_STAMP="$VENV_DIR/.lazymind-test-hermetic.sha256"
 REQUIRED_PYTHON="3.11"
 REQUIRED_NODE_MAJOR="20"
-REQUIRED_GO="1.24.0"
+REQUIRED_GO="1.25.0"
 
 fail() {
   echo "Error: $*" >&2
@@ -98,8 +98,8 @@ test_hermetic_check_go() {
 
   local version
   version="$(go version | awk '{print $3}' | sed 's/^go//')"
-  if [[ ! "$version" =~ ^1\.24(\.[0-9]+)?$ ]]; then
-    fail "Go $version found, but Go 1.24.x is required"
+  if [[ ! "$version" =~ ^1\.25(\.[0-9]+)?$ ]]; then
+    fail "Go $version found, but Go 1.25.x is required"
   fi
 }
 
